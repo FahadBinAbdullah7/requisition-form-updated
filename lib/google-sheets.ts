@@ -127,6 +127,23 @@ class GoogleSheetsService {
 
       const token = await this.getAccessToken()
 
+      const formFieldsResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/form-fields`,
+      )
+      const formFieldsData = await formFieldsResponse.json()
+      const formFields = formFieldsData.formFields || []
+
+      // Create headers based on form fields order
+      const expectedHeaders = [
+        "ID",
+        ...formFields.map((field: any) => field.label),
+        "Priority",
+        "Status",
+        "Created Date",
+        "Assignee",
+      ]
+
+      // Check if headers exist in Sheet1
       const headersResponse = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/Sheet1!1:1`,
         {
@@ -136,45 +153,60 @@ class GoogleSheetsService {
         },
       )
 
-      const headersData = await headersResponse.json()
-      const headers = headersData.values?.[0] || []
+      let headers: string[] = []
+      if (headersResponse.ok) {
+        const headersData = await headersResponse.json()
+        headers = headersData.values?.[0] || []
+      }
+
+      // If no headers exist or they don't match expected, create them
+      if (headers.length === 0 || !this.headersMatch(headers, expectedHeaders)) {
+        await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/Sheet1!1:1?valueInputOption=RAW`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              values: [expectedHeaders],
+            }),
+          },
+        )
+        headers = expectedHeaders
+      }
 
       const rowData = new Array(headers.length).fill("")
 
-      Object.keys(ticketData).forEach((key) => {
-        const headerIndex = headers.findIndex(
-          (header: string) =>
-            header.toLowerCase().trim() === key.toLowerCase().trim() ||
-            header
-              .toLowerCase()
-              .replace(/\s+/g, "")
-              .replace(/[^a-z0-9]/gi, "") ===
-              key
-                .toLowerCase()
-                .replace(/\s+/g, "")
-                .replace(/[^a-z0-9]/gi, ""),
-        )
-
-        if (headerIndex !== -1) {
-          const value = ticketData[key]
-          rowData[headerIndex] = Array.isArray(value) ? value.join(", ") : value || ""
-        }
-      })
-
+      // Set ID
       const idIndex = headers.findIndex((h: string) => h.toLowerCase().includes("id"))
-      if (idIndex !== -1 && !rowData[idIndex]) {
+      if (idIndex !== -1) {
         rowData[idIndex] = `TKT-${Date.now()}`
       }
 
+      // Map form field data in order
+      formFields.forEach((field: any, index: number) => {
+        const headerIndex = index + 1 // +1 because ID is first
+        if (headerIndex < headers.length) {
+          const value = ticketData[field.id] || ticketData[field.label] || ""
+          rowData[headerIndex] = Array.isArray(value) ? value.join(", ") : value
+        }
+      })
+
+      // Set additional fields
+      const priorityIndex = headers.findIndex((h: string) => h.toLowerCase().includes("priority"))
+      if (priorityIndex !== -1) {
+        rowData[priorityIndex] = ticketData.priority || "Medium"
+      }
+
       const statusIndex = headers.findIndex((h: string) => h.toLowerCase().includes("status"))
-      if (statusIndex !== -1 && !rowData[statusIndex]) {
+      if (statusIndex !== -1) {
         rowData[statusIndex] = "todo"
       }
 
-      const dateIndex = headers.findIndex(
-        (h: string) => h.toLowerCase().includes("date") || h.toLowerCase().includes("created"),
-      )
-      if (dateIndex !== -1 && !rowData[dateIndex]) {
+      const dateIndex = headers.findIndex((h: string) => h.toLowerCase().includes("created"))
+      if (dateIndex !== -1) {
         rowData[dateIndex] = new Date().toISOString()
       }
 
@@ -522,6 +554,11 @@ class GoogleSheetsService {
       console.error("[v0] Error updating ticket status:", error)
       return false
     }
+  }
+
+  private headersMatch(existing: string[], expected: string[]): boolean {
+    if (existing.length !== expected.length) return false
+    return existing.every((header, index) => header.toLowerCase().trim() === expected[index].toLowerCase().trim())
   }
 }
 
