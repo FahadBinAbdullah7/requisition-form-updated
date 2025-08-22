@@ -12,7 +12,22 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Settings, Users, FileText, Plus, Trash2, Edit, Save, Database, UserPlus, Building } from "lucide-react"
+import {
+  Settings,
+  Users,
+  FileText,
+  Plus,
+  Trash2,
+  Edit,
+  Save,
+  Database,
+  UserPlus,
+  Building,
+  Eye,
+  CheckSquare,
+  FolderPlus,
+} from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
 interface FormField {
   id: string
@@ -38,6 +53,30 @@ interface User {
   role: "Admin" | "Manager" | "Member"
   team: string
   status: "Active" | "Inactive"
+}
+
+interface Ticket {
+  id: string
+  productName: string
+  type: string
+  priority: "Low" | "Medium" | "High" | "Critical"
+  status: "Open" | "In Progress" | "Review" | "Completed"
+  team: string
+  assignee?: string
+  createdDate: string
+  details: string
+  deliveryTimeline: string
+  requisitionBreakdown?: string
+}
+
+interface Project {
+  id: string
+  name: string
+  description: string
+  tickets: string[]
+  assignedMembers: string[]
+  status: "Planning" | "Active" | "Completed"
+  createdDate: string
 }
 
 export default function AdminPanel() {
@@ -142,6 +181,50 @@ export default function AdminPanel() {
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "Member", team: "" })
   const [showAddUser, setShowAddUser] = useState(false)
+  const [tickets, setTickets] = useState<Ticket[]>([
+    {
+      id: "1",
+      productName: "Website Redesign",
+      type: "Design",
+      priority: "High",
+      status: "In Progress",
+      team: "UX/UI Design",
+      assignee: "Jessica Kim",
+      createdDate: "2024-01-15",
+      details: "Complete redesign of the company website with modern UI/UX principles",
+      deliveryTimeline: "2024-02-15",
+      requisitionBreakdown: "https://docs.google.com/document/d/example",
+    },
+    {
+      id: "2",
+      productName: "Mobile App Development",
+      type: "Technical",
+      priority: "Critical",
+      status: "Open",
+      team: "DevOps",
+      createdDate: "2024-01-20",
+      details: "Develop mobile application for iOS and Android platforms",
+      deliveryTimeline: "2024-03-01",
+    },
+    {
+      id: "3",
+      productName: "Marketing Campaign",
+      type: "Marketing",
+      priority: "Medium",
+      status: "Review",
+      team: "Digital Marketing",
+      assignee: "Sarah Johnson",
+      createdDate: "2024-01-10",
+      details: "Q1 marketing campaign for new product launch",
+      deliveryTimeline: "2024-02-01",
+    },
+  ])
+
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedTickets, setSelectedTickets] = useState<string[]>([])
+  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
+  const [showCreateProject, setShowCreateProject] = useState(false)
+  const [newProject, setNewProject] = useState({ name: "", description: "" })
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== "admin")) {
@@ -240,14 +323,56 @@ export default function AdminPanel() {
     )
   }
 
+  // Ticket and Project Management Functions
+  const toggleTicketSelection = (ticketId: string) => {
+    setSelectedTickets((prev) => (prev.includes(ticketId) ? prev.filter((id) => id !== ticketId) : [...prev, ticketId]))
+  }
+
+  const createProject = () => {
+    if (newProject.name && selectedTickets.length > 0) {
+      const project: Project = {
+        id: `project_${Date.now()}`,
+        name: newProject.name,
+        description: newProject.description,
+        tickets: selectedTickets,
+        assignedMembers: [],
+        status: "Planning",
+        createdDate: new Date().toISOString().split("T")[0],
+      }
+      setProjects((prev) => [...prev, project])
+      setSelectedTickets([])
+      setNewProject({ name: "", description: "" })
+      setShowCreateProject(false)
+    }
+  }
+
+  const assignMemberToProject = (projectId: string, memberId: string) => {
+    setProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId ? { ...project, assignedMembers: [...project.assignedMembers, memberId] } : project,
+      ),
+    )
+  }
+
+  const assignTicketToMember = (ticketId: string, memberId: string) => {
+    setTickets((prev) =>
+      prev.map((ticket) =>
+        ticket.id === ticketId ? { ...ticket, assignee: users.find((u) => u.id === memberId)?.name } : ticket,
+      ),
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation Header */}
       <NavigationHeader title="Admin Panel" subtitle="Manage system configuration and users" backUrl="/dashboard" />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <Tabs defaultValue="forms" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs defaultValue="tasks" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="tasks" className="flex items-center gap-2">
+              <CheckSquare className="h-4 w-4" />
+              All Tasks
+            </TabsTrigger>
             <TabsTrigger value="forms" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               Form Management
@@ -266,7 +391,245 @@ export default function AdminPanel() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Form Management Tab */}
+          <TabsContent value="tasks">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>All Tickets & Projects</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Manage tickets and create projects ({tickets.length} tickets, {projects.length} projects)
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setShowCreateProject(true)}
+                      disabled={selectedTickets.length === 0}
+                      className="flex items-center gap-2"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                      Create Project ({selectedTickets.length})
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {tickets.map((ticket) => (
+                      <div key={ticket.id} className="flex items-center gap-4 p-4 border border-border rounded-lg">
+                        <input
+                          type="checkbox"
+                          checked={selectedTickets.includes(ticket.id)}
+                          onChange={() => toggleTicketSelection(ticket.id)}
+                          className="rounded border-border"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-medium">{ticket.productName}</h3>
+                            <Badge variant="outline">{ticket.type}</Badge>
+                            <Badge
+                              variant={
+                                ticket.priority === "Critical"
+                                  ? "destructive"
+                                  : ticket.priority === "High"
+                                    ? "default"
+                                    : ticket.priority === "Medium"
+                                      ? "secondary"
+                                      : "outline"
+                              }
+                            >
+                              {ticket.priority}
+                            </Badge>
+                            <Badge
+                              variant={
+                                ticket.status === "Completed"
+                                  ? "default"
+                                  : ticket.status === "In Progress"
+                                    ? "secondary"
+                                    : "outline"
+                              }
+                            >
+                              {ticket.status}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Team: {ticket.team} • Due: {ticket.deliveryTimeline}
+                            {ticket.assignee && ` • Assigned to: ${ticket.assignee}`}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Select onValueChange={(value) => assignTicketToMember(ticket.id, value)}>
+                            <SelectTrigger className="w-40">
+                              <SelectValue placeholder="Assign to..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {users
+                                .filter((u) => u.role !== "Admin")
+                                .map((user) => (
+                                  <SelectItem key={user.id} value={user.id}>
+                                    {user.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm" onClick={() => setViewingTicket(ticket)}>
+                                <Eye className="h-4 w-4" />
+                                View Details
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl">
+                              <DialogHeader>
+                                <DialogTitle>{ticket.productName}</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <Label>Type</Label>
+                                    <p className="text-sm">{ticket.type}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Priority</Label>
+                                    <p className="text-sm">{ticket.priority}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Status</Label>
+                                    <p className="text-sm">{ticket.status}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Team</Label>
+                                    <p className="text-sm">{ticket.team}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Delivery Timeline</Label>
+                                    <p className="text-sm">{ticket.deliveryTimeline}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Created Date</Label>
+                                    <p className="text-sm">{ticket.createdDate}</p>
+                                  </div>
+                                </div>
+                                <div>
+                                  <Label>Details</Label>
+                                  <p className="text-sm mt-1">{ticket.details}</p>
+                                </div>
+                                {ticket.requisitionBreakdown && (
+                                  <div>
+                                    <Label>Requisition Breakdown</Label>
+                                    <a
+                                      href={ticket.requisitionBreakdown}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sm text-blue-600 hover:underline block mt-1"
+                                    >
+                                      View Document
+                                    </a>
+                                  </div>
+                                )}
+                                {ticket.assignee && (
+                                  <div>
+                                    <Label>Assigned To</Label>
+                                    <p className="text-sm">{ticket.assignee}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {projects.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Active Projects</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {projects.map((project) => (
+                        <div key={project.id} className="p-4 border border-border rounded-lg">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <h3 className="font-medium">{project.name}</h3>
+                              <p className="text-sm text-muted-foreground">{project.description}</p>
+                            </div>
+                            <Badge variant="outline">{project.status}</Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground mb-2">
+                            {project.tickets.length} tickets • {project.assignedMembers.length} assigned members
+                          </div>
+                          <div className="flex gap-2">
+                            <Select onValueChange={(value) => assignMemberToProject(project.id, value)}>
+                              <SelectTrigger className="w-48">
+                                <SelectValue placeholder="Assign member..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {users
+                                  .filter((u) => u.role !== "Admin" && !project.assignedMembers.includes(u.id))
+                                  .map((user) => (
+                                    <SelectItem key={user.id} value={user.id}>
+                                      {user.name} ({user.team})
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Project</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Project Name</Label>
+                    <Input
+                      value={newProject.name}
+                      onChange={(e) => setNewProject((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="Enter project name"
+                    />
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Textarea
+                      value={newProject.description}
+                      onChange={(e) => setNewProject((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="Enter project description"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <Label>Selected Tickets ({selectedTickets.length})</Label>
+                    <div className="text-sm text-muted-foreground">
+                      {selectedTickets
+                        .map((ticketId) => {
+                          const ticket = tickets.find((t) => t.id === ticketId)
+                          return ticket ? ticket.productName : ""
+                        })
+                        .join(", ")}
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setShowCreateProject(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={createProject}>Create Project</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
           <TabsContent value="forms">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -386,7 +749,6 @@ export default function AdminPanel() {
                     </div>
                   ))}
 
-                  {/* Add New Field Form */}
                   {showAddField && (
                     <Card className="border-dashed">
                       <CardContent className="pt-6">
@@ -465,7 +827,6 @@ export default function AdminPanel() {
             </Card>
           </TabsContent>
 
-          {/* Team Management Tab */}
           <TabsContent value="teams">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -513,7 +874,6 @@ export default function AdminPanel() {
                     </div>
                   ))}
 
-                  {/* Add New Team Form */}
                   {showAddTeam && (
                     <Card className="border-dashed">
                       <CardContent className="pt-6">
@@ -561,7 +921,6 @@ export default function AdminPanel() {
             </Card>
           </TabsContent>
 
-          {/* User Management Tab */}
           <TabsContent value="users">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -609,7 +968,6 @@ export default function AdminPanel() {
                     </div>
                   ))}
 
-                  {/* Add New User Form */}
                   {showAddUser && (
                     <Card className="border-dashed">
                       <CardContent className="pt-6">
@@ -684,7 +1042,6 @@ export default function AdminPanel() {
             </Card>
           </TabsContent>
 
-          {/* System Settings Tab */}
           <TabsContent value="settings">
             <div className="grid gap-6">
               <Card>
