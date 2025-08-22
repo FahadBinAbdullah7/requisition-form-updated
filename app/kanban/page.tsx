@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { NavigationHeader } from "@/components/navigation-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -51,35 +51,18 @@ export default function KanbanBoard() {
   const [showTicketSelector, setShowTicketSelector] = useState(false)
   const [selectedTickets, setSelectedTickets] = useState<string[]>([])
   const [projectName, setProjectName] = useState("")
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    type: "Technical",
+    priority: "Medium" as Ticket["priority"],
+    assignee: "",
+    team: "",
+    dueDate: "",
+  })
 
-  const [availableTickets] = useState<Ticket[]>([
-    {
-      id: "TKT-007",
-      title: "Mobile App Performance Optimization",
-      description: "Optimize mobile app performance and reduce loading times",
-      type: "Technical",
-      priority: "High",
-      assignee: { name: "John Doe", avatar: "", initials: "JD" },
-      team: "Mobile Development",
-      dueDate: "2025-01-30",
-      createdDate: "2025-01-22",
-      status: "todo",
-      tags: ["Performance", "Mobile", "Optimization"],
-    },
-    {
-      id: "TKT-008",
-      title: "Email Marketing Campaign",
-      description: "Create and launch quarterly email marketing campaign",
-      type: "Marketing",
-      priority: "Medium",
-      assignee: { name: "Jane Smith", avatar: "", initials: "JS" },
-      team: "Email Marketing",
-      dueDate: "2025-02-05",
-      createdDate: "2025-01-23",
-      status: "todo",
-      tags: ["Email", "Campaign", "Marketing"],
-    },
-  ])
+  const [availableTickets, setAvailableTickets] = useState<Ticket[]>([])
 
   const [columns, setColumns] = useState<KanbanColumn[]>([
     {
@@ -87,139 +70,90 @@ export default function KanbanBoard() {
       title: "To Do",
       status: "todo",
       color: "bg-gray-100 border-gray-200",
-      tickets: [
-        {
-          id: "TKT-001",
-          title: "Product Launch Campaign Setup",
-          description:
-            "Create comprehensive marketing campaign for new product launch including social media, email, and web content.",
-          type: "Marketing",
-          priority: "High",
-          assignee: {
-            name: "Sarah Johnson",
-            avatar: "/diverse-woman-portrait.png",
-            initials: "SJ",
-          },
-          team: "Digital Marketing",
-          dueDate: "2025-01-25",
-          createdDate: "2025-01-20",
-          status: "todo",
-          tags: ["Campaign", "Launch", "Social Media"],
-        },
-        {
-          id: "TKT-004",
-          title: "User Onboarding Flow Redesign",
-          description: "Redesign the user onboarding experience to improve conversion rates.",
-          type: "Design",
-          priority: "Medium",
-          assignee: {
-            name: "Jessica Kim",
-            avatar: "/serene-asian-woman.png",
-            initials: "JK",
-          },
-          team: "UX/UI Design",
-          dueDate: "2025-01-28",
-          createdDate: "2025-01-21",
-          status: "todo",
-          tags: ["UX", "Onboarding", "Conversion"],
-        },
-      ],
+      tickets: [],
     },
     {
       id: "in-progress",
       title: "In Progress",
       status: "in-progress",
       color: "bg-blue-50 border-blue-200",
-      tickets: [
-        {
-          id: "TKT-002",
-          title: "Database Migration Requirements",
-          description: "Document requirements and plan for migrating legacy database to new infrastructure.",
-          type: "Technical",
-          priority: "Critical",
-          assignee: {
-            name: "Mike Chen",
-            avatar: "/thoughtful-asian-man.png",
-            initials: "MC",
-          },
-          team: "DevOps",
-          dueDate: "2025-01-23",
-          createdDate: "2025-01-18",
-          status: "in-progress",
-          tags: ["Database", "Migration", "Infrastructure"],
-        },
-        {
-          id: "TKT-005",
-          title: "Customer Feedback Analysis",
-          description: "Analyze recent customer feedback and create actionable insights report.",
-          type: "Research",
-          priority: "Medium",
-          assignee: {
-            name: "Emily Davis",
-            avatar: "/blonde-woman-portrait.png",
-            initials: "ED",
-          },
-          team: "Customer Success",
-          dueDate: "2025-01-26",
-          createdDate: "2025-01-19",
-          status: "in-progress",
-          tags: ["Research", "Feedback", "Analysis"],
-        },
-      ],
+      tickets: [],
     },
     {
       id: "review",
       title: "Review",
       status: "review",
       color: "bg-yellow-50 border-yellow-200",
-      tickets: [
-        {
-          id: "TKT-006",
-          title: "API Documentation Update",
-          description: "Update API documentation with new endpoints and authentication methods.",
-          type: "Documentation",
-          priority: "Low",
-          assignee: {
-            name: "Alex Rodriguez",
-            avatar: "/hispanic-man.png",
-            initials: "AR",
-          },
-          team: "Product Management",
-          dueDate: "2025-01-24",
-          createdDate: "2025-01-17",
-          status: "review",
-          tags: ["Documentation", "API", "Technical"],
-        },
-      ],
+      tickets: [],
     },
     {
       id: "done",
       title: "Done",
       status: "done",
       color: "bg-green-50 border-green-200",
-      tickets: [
-        {
-          id: "TKT-003",
-          title: "Customer Onboarding Process",
-          description: "Streamline customer onboarding process and create automated workflows.",
-          type: "Operations",
-          priority: "Medium",
-          assignee: {
-            name: "Emily Davis",
-            avatar: "/blonde-woman-portrait.png",
-            initials: "ED",
-          },
-          team: "Customer Success",
-          dueDate: "2025-01-22",
-          createdDate: "2025-01-15",
-          status: "done",
-          tags: ["Process", "Automation", "Workflow"],
-        },
-      ],
+      tickets: [],
     },
   ])
 
   const teams = ["Digital Marketing", "DevOps", "Customer Success", "Product Management", "UX/UI Design"]
+  const teamMembers = [
+    { id: "1", name: "Sarah Johnson", team: "Digital Marketing", initials: "SJ" },
+    { id: "2", name: "Mike Chen", team: "DevOps", initials: "MC" },
+    { id: "3", name: "Emily Davis", team: "Customer Success", initials: "ED" },
+    { id: "4", name: "Alex Rodriguez", team: "Product Management", initials: "AR" },
+    { id: "5", name: "Jessica Kim", team: "UX/UI Design", initials: "JK" },
+  ]
+
+  useEffect(() => {
+    const loadTickets = async () => {
+      try {
+        const response = await fetch("/api/tickets")
+        if (response.ok) {
+          const tickets = await response.json()
+          const kanbanTickets = tickets.map((ticket: any) => ({
+            id: ticket.id,
+            title: ticket.productName,
+            description: ticket.details,
+            type: ticket.type,
+            priority: ticket.priority || "Medium",
+            assignee: {
+              name: ticket.assignee || "Unassigned",
+              avatar: "",
+              initials: ticket.assignee
+                ? ticket.assignee
+                    .split(" ")
+                    .map((n: string) => n[0])
+                    .join("")
+                : "UN",
+            },
+            team: ticket.team,
+            dueDate: ticket.deliveryTimeline,
+            createdDate: ticket.createdDate,
+            status:
+              ticket.status === "Open"
+                ? "todo"
+                : ticket.status === "In Progress"
+                  ? "in-progress"
+                  : ticket.status === "Review"
+                    ? "review"
+                    : "done",
+            tags: [ticket.type, ticket.priority],
+          }))
+
+          setColumns((prevColumns) =>
+            prevColumns.map((column) => ({
+              ...column,
+              tickets: kanbanTickets.filter((ticket: Ticket) => ticket.status === column.status),
+            })),
+          )
+        }
+      } catch (error) {
+        console.log("[v0] Failed to load tickets:", error)
+      }
+    }
+
+    loadTickets()
+  }, [])
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -274,7 +208,52 @@ export default function KanbanBoard() {
           tickets: column.tickets.filter((ticket) => ticket.id !== ticketId),
         })),
       )
+
+      setAvailableTickets((prev) => prev.filter((ticket) => ticket.id !== ticketId))
     }
+  }
+
+  const handleAddTask = () => {
+    if (!newTask.title.trim() || !newTask.assignee) {
+      alert("Please fill in all required fields")
+      return
+    }
+
+    const assignedMember = teamMembers.find((member) => member.id === newTask.assignee)
+    if (!assignedMember) return
+
+    const task: Ticket = {
+      id: `TKT-${Date.now()}`,
+      title: newTask.title,
+      description: newTask.description,
+      type: newTask.type,
+      priority: newTask.priority,
+      assignee: {
+        name: assignedMember.name,
+        avatar: "",
+        initials: assignedMember.initials,
+      },
+      team: assignedMember.team,
+      dueDate: newTask.dueDate,
+      createdDate: new Date().toISOString().split("T")[0],
+      status: "todo",
+      tags: [newTask.type, newTask.priority],
+    }
+
+    setColumns((prevColumns) =>
+      prevColumns.map((column) => (column.id === "todo" ? { ...column, tickets: [...column.tickets, task] } : column)),
+    )
+
+    setNewTask({
+      title: "",
+      description: "",
+      type: "Technical",
+      priority: "Medium",
+      assignee: "",
+      team: "",
+      dueDate: "",
+    })
+    setShowAddTask(false)
   }
 
   const handleCreateProject = () => {
@@ -316,10 +295,8 @@ export default function KanbanBoard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation Header */}
       <NavigationHeader title="Kanban Board" subtitle="Manage and track team tasks visually" backUrl="/dashboard" />
 
-      {/* Filters */}
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
@@ -364,65 +341,179 @@ export default function KanbanBoard() {
               {totalTickets} tickets
             </Badge>
             {user?.role === "admin" && (
-              <Dialog open={showTicketSelector} onOpenChange={setShowTicketSelector}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="flex items-center gap-2 bg-transparent">
-                    <FolderPlus className="h-4 w-4" />
-                    Create Project
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Create Project from Tickets</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Project Name</label>
-                      <Input
-                        value={projectName}
-                        onChange={(e) => setProjectName(e.target.value)}
-                        placeholder="Enter project name"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Select Tickets</label>
-                      <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                        {availableTickets.map((ticket) => (
-                          <div key={ticket.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                            <Checkbox
-                              checked={selectedTickets.includes(ticket.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedTickets((prev) => [...prev, ticket.id])
-                                } else {
-                                  setSelectedTickets((prev) => prev.filter((id) => id !== ticket.id))
-                                }
-                              }}
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-mono text-xs text-muted-foreground">{ticket.id}</span>
-                                <Badge variant="outline" className={getPriorityColor(ticket.priority)}>
-                                  {ticket.priority}
-                                </Badge>
-                              </div>
-                              <h4 className="font-medium text-sm">{ticket.title}</h4>
-                              <p className="text-xs text-muted-foreground mt-1">{ticket.description}</p>
-                            </div>
-                          </div>
-                        ))}
+              <>
+                <Dialog open={showAddTask} onOpenChange={setShowAddTask}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="flex items-center gap-2 bg-transparent">
+                      <Plus className="h-4 w-4" />
+                      Add Task
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Task</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium">Task Title</label>
+                        <Input
+                          value={newTask.title}
+                          onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
+                          placeholder="Enter task title"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Description</label>
+                        <Input
+                          value={newTask.description}
+                          onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
+                          placeholder="Enter task description"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium">Type</label>
+                          <Select
+                            value={newTask.type}
+                            onValueChange={(value) => setNewTask((prev) => ({ ...prev, type: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Technical">Technical</SelectItem>
+                              <SelectItem value="Marketing">Marketing</SelectItem>
+                              <SelectItem value="Design">Design</SelectItem>
+                              <SelectItem value="Operations">Operations</SelectItem>
+                              <SelectItem value="Research">Research</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Priority</label>
+                          <Select
+                            value={newTask.priority}
+                            onValueChange={(value) =>
+                              setNewTask((prev) => ({ ...prev, priority: value as Ticket["priority"] }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Low">Low</SelectItem>
+                              <SelectItem value="Medium">Medium</SelectItem>
+                              <SelectItem value="High">High</SelectItem>
+                              <SelectItem value="Critical">Critical</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium">Assign To</label>
+                          <Select
+                            value={newTask.assignee}
+                            onValueChange={(value) => setNewTask((prev) => ({ ...prev, assignee: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select team member" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teamMembers.map((member) => (
+                                <SelectItem key={member.id} value={member.id}>
+                                  {member.name} ({member.team})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Due Date</label>
+                          <Input
+                            type="date"
+                            value={newTask.dueDate}
+                            onChange={(e) => setNewTask((prev) => ({ ...prev, dueDate: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setShowAddTask(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleAddTask}>Add Task</Button>
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setShowTicketSelector(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleCreateProject}>Create Project ({selectedTickets.length} tickets)</Button>
+                  </DialogContent>
+                </Dialog>
+                <Dialog open={showTicketSelector} onOpenChange={setShowTicketSelector}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="flex items-center gap-2 bg-transparent">
+                      <FolderPlus className="h-4 w-4" />
+                      Create Project
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Create Project from Tickets</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium">Project Name</label>
+                        <Input
+                          value={projectName}
+                          onChange={(e) => setProjectName(e.target.value)}
+                          placeholder="Enter project name"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Select Tickets</label>
+                        <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+                          {availableTickets.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              No available tickets to create projects from
+                            </p>
+                          ) : (
+                            availableTickets.map((ticket) => (
+                              <div key={ticket.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                                <Checkbox
+                                  checked={selectedTickets.includes(ticket.id)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setSelectedTickets((prev) => [...prev, ticket.id])
+                                    } else {
+                                      setSelectedTickets((prev) => prev.filter((id) => id !== ticket.id))
+                                    }
+                                  }}
+                                />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-mono text-xs text-muted-foreground">{ticket.id}</span>
+                                    <Badge variant="outline" className={getPriorityColor(ticket.priority)}>
+                                      {ticket.priority}
+                                    </Badge>
+                                  </div>
+                                  <h4 className="font-medium text-sm">{ticket.title}</h4>
+                                  <p className="text-xs text-muted-foreground mt-1">{ticket.description}</p>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setShowTicketSelector(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleCreateProject} disabled={selectedTickets.length === 0}>
+                          Create Project ({selectedTickets.length} tickets)
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
+              </>
             )}
             <Link href="/create-ticket">
               <Button className="flex items-center gap-2">
@@ -434,7 +525,6 @@ export default function KanbanBoard() {
         </div>
       </div>
 
-      {/* Kanban Board */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredColumns.map((column) => (
@@ -444,7 +534,6 @@ export default function KanbanBoard() {
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, column.id)}
             >
-              {/* Column Header */}
               <div className={`rounded-t-lg border-2 ${column.color} p-4`}>
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-foreground">{column.title}</h2>
@@ -454,7 +543,6 @@ export default function KanbanBoard() {
                 </div>
               </div>
 
-              {/* Column Content */}
               <div
                 className={`flex-1 border-l-2 border-r-2 border-b-2 ${column.color.replace("bg-", "border-").split(" ")[1]} rounded-b-lg p-4 space-y-4 min-h-96`}
               >
@@ -491,7 +579,6 @@ export default function KanbanBoard() {
                     <CardContent className="pt-0">
                       <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{ticket.description}</p>
 
-                      {/* Tags */}
                       <div className="flex flex-wrap gap-1 mb-3">
                         {ticket.tags.slice(0, 2).map((tag) => (
                           <Badge key={tag} variant="outline" className="text-xs px-2 py-0">
@@ -505,7 +592,6 @@ export default function KanbanBoard() {
                         )}
                       </div>
 
-                      {/* Footer */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-6 w-6">
@@ -526,14 +612,16 @@ export default function KanbanBoard() {
                   </Card>
                 ))}
 
-                {/* Add New Ticket Button */}
-                <Button
-                  variant="ghost"
-                  className="w-full border-2 border-dashed border-muted-foreground/25 h-12 text-muted-foreground hover:border-muted-foreground/50"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add ticket
-                </Button>
+                {user?.role === "admin" && (
+                  <Button
+                    variant="ghost"
+                    className="w-full border-2 border-dashed border-muted-foreground/25 h-12 text-muted-foreground hover:border-muted-foreground/50"
+                    onClick={() => setShowAddTask(true)}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add ticket
+                  </Button>
+                )}
               </div>
             </div>
           ))}
