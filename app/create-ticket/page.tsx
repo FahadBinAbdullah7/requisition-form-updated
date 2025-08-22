@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,38 +22,103 @@ interface FormField {
 
 export default function CreateTicket() {
   const [formData, setFormData] = useState<Record<string, any>>({
+    productName: "",
+    type: "",
+    deliveryTimeline: "",
+    teamSelection: "",
+    details: "",
+    requisitionBreakdown: "",
     priority: "Medium",
   })
 
-  const [formFields, setFormFields] = useState<FormField[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  // Default form fields - can be modified by admin
+  const [formFields, setFormFields] = useState<FormField[]>([
+    {
+      id: "productName",
+      label: "Product/Course/Requisition Name",
+      type: "text",
+      required: true,
+    },
+    {
+      id: "type",
+      label: "Type",
+      type: "select",
+      required: true,
+      options: ["Marketing", "Technical", "Operations", "Design", "Content", "Research", "Support"],
+    },
+    {
+      id: "deliveryTimeline",
+      label: "Delivery Timeline",
+      type: "date",
+      required: true,
+    },
+    {
+      id: "teamSelection",
+      label: "Team Selection",
+      type: "select",
+      required: true,
+      options: [
+        "Digital Marketing",
+        "Content Marketing",
+        "Social Media",
+        "SEO/SEM",
+        "Email Marketing",
+        "DevOps",
+        "Frontend Development",
+        "Backend Development",
+        "Mobile Development",
+        "QA Testing",
+        "Customer Success",
+        "Customer Support",
+        "Sales Operations",
+        "Business Development",
+        "Account Management",
+        "Product Management",
+        "UX/UI Design",
+        "Graphic Design",
+        "Video Production",
+        "Brand Management",
+        "Data Analytics",
+        "Business Intelligence",
+        "Market Research",
+        "Competitive Analysis",
+        "User Research",
+        "Project Management",
+        "Operations",
+        "Supply Chain",
+        "Logistics",
+        "Procurement",
+        "Human Resources",
+        "Talent Acquisition",
+        "Learning & Development",
+        "Employee Relations",
+        "Compensation",
+        "Finance",
+        "Accounting",
+        "Legal",
+        "Compliance",
+        "Risk Management",
+        "IT Support",
+        "Information Security",
+        "Infrastructure",
+        "Cloud Operations",
+      ],
+    },
+    {
+      id: "details",
+      label: "Details",
+      type: "textarea",
+      required: true,
+    },
+    {
+      id: "requisitionBreakdown",
+      label: "Requisition Breakdown (Google Sheet/Docs Link)",
+      type: "url",
+      required: false,
+    },
+  ])
+
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  useEffect(() => {
-    const fetchFormFields = async () => {
-      try {
-        const response = await fetch("/api/form-fields")
-        const data = await response.json()
-
-        if (data.formFields) {
-          setFormFields(data.formFields)
-
-          // Initialize form data with empty values for each field
-          const initialData: Record<string, any> = { priority: "Medium" }
-          data.formFields.forEach((field: FormField) => {
-            initialData[field.id] = field.type === "checkbox" ? [] : ""
-          })
-          setFormData(initialData)
-        }
-      } catch (error) {
-        console.error("[v0] Error fetching form fields:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchFormFields()
-  }, [])
 
   const handleInputChange = (fieldId: string, value: string | string[]) => {
     setFormData((prev) => ({
@@ -100,11 +165,21 @@ export default function CreateTicket() {
 
         // Reset form after successful submission
         if (!isDraft) {
-          const resetData: Record<string, any> = { priority: "Medium" }
+          const resetData: Record<string, any> = {
+            productName: "",
+            type: "",
+            deliveryTimeline: "",
+            teamSelection: "",
+            details: "",
+            requisitionBreakdown: "",
+            priority: "Medium",
+          }
 
-          // Reset all fields to empty values
+          // Reset checkbox fields to empty arrays
           formFields.forEach((field) => {
-            resetData[field.id] = field.type === "checkbox" ? [] : ""
+            if (field.type === "checkbox") {
+              resetData[field.id] = []
+            }
           })
 
           setFormData(resetData)
@@ -208,17 +283,6 @@ export default function CreateTicket() {
           />
         )
     }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading form...</p>
-        </div>
-      </div>
-    )
   }
 
   return (
