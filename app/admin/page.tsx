@@ -230,30 +230,130 @@ export default function AdminPanel() {
     return null
   }
 
-  // Form Field Management Functions
-  const addFormField = () => {
-    if (newField.label) {
-      const field: FormField = {
-        id: `field_${Date.now()}`,
-        label: newField.label,
-        type: newField.type || "text",
-        required: newField.required || false,
-        options: newField.options,
+  // Replace your existing functions in the admin panel with these:
+
+const saveFormFields = async (fields: FormField[]) => {
+  try {
+    console.log("🔄 Saving form fields:", fields.length)
+    
+    // Try to save via Google Sheets service first
+    const success = await googleSheetsService.saveFormFields(fields)
+    
+    if (success) {
+      console.log("✅ Form fields saved successfully via Google Sheets/localStorage")
+      return
+    }
+
+    // Fallback: Try API endpoint
+    console.log("🔄 Trying API endpoint as fallback...")
+    const response = await fetch("/api/form-fields", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ formFields: fields }),
+    })
+    
+    if (response.ok) {
+      console.log("✅ Form fields saved via API")
+    } else {
+      console.error("❌ Failed to save via API, using localStorage")
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('formFields', JSON.stringify(fields))
       }
-      setFormFields((prev) => [...prev, field])
-      setNewField({ label: "", type: "text", required: false })
-      setShowAddField(false)
+    }
+  } catch (error) {
+    console.error("❌ Error saving form fields:", error)
+    // Final fallback to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('formFields', JSON.stringify(fields))
+      console.log("✅ Form fields saved to localStorage as final fallback")
     }
   }
+}
 
-  const removeFormField = (fieldId: string) => {
-    setFormFields((prev) => prev.filter((field) => field.id !== fieldId))
+const fetchFormFields = async () => {
+  try {
+    console.log("🔄 Fetching form fields...")
+    
+    // Try Google Sheets service first
+    const formFields = await googleSheetsService.getFormFields()
+    setFormFields(formFields)
+    console.log("✅ Form fields loaded:", formFields.length, "fields")
+  } catch (error) {
+    console.error("❌ Error fetching form fields:", error)
+    
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('formFields')
+      const fallbackFields = stored ? JSON.parse(stored) : googleSheetsService.getMockFormFields()
+      setFormFields(fallbackFields)
+      console.log("✅ Form fields loaded from localStorage/mock:", fallbackFields.length, "fields")
+    } else {
+      setFormFields(googleSheetsService.getMockFormFields())
+    }
   }
+}
 
-  const updateFormField = (fieldId: string, updates: Partial<FormField>) => {
-    setFormFields((prev) => prev.map((field) => (field.id === fieldId ? { ...field, ...updates } : field)))
-    setEditingField(null)
+// Enhanced addFormField with better logging
+const addFormField = async () => {
+  console.log("🔄 Adding new field:", newField)
+  
+  if (newField.label) {
+    const field: FormField = {
+      id: `field_${Date.now()}`,
+      label: newField.label,
+      type: newField.type || "text",
+      required: newField.required || false,
+      options: newField.options,
+    }
+    
+    const updatedFormFields = [...formFields, field]
+    console.log("📝 Total fields after addition:", updatedFormFields.length)
+    
+    // Update state immediately
+    setFormFields(updatedFormFields)
+    
+    // Save to persistence
+    await saveFormFields(updatedFormFields)
+    
+    // Reset form
+    setNewField({ label: "", type: "text", required: false })
+    setShowAddField(false)
+    
+    console.log("✅ Field added successfully")
+  } else {
+    console.warn("⚠️ Cannot add field: label is required")
   }
+}
+
+// Enhanced removeFormField with better logging
+const removeFormField = async (fieldId: string) => {
+  console.log("🗑️ Removing field:", fieldId)
+  
+  const updatedFormFields = formFields.filter((field) => field.id !== fieldId)
+  console.log("📝 Total fields after removal:", updatedFormFields.length)
+  
+  setFormFields(updatedFormFields)
+  await saveFormFields(updatedFormFields)
+  
+  console.log("✅ Field removed successfully")
+}
+
+// Enhanced updateFormField with better logging
+const updateFormField = async (fieldId: string, updates: Partial<FormField>) => {
+  console.log("📝 Updating field:", fieldId, "with:", updates)
+  
+  const updatedFormFields = formFields.map((field) => 
+    field.id === fieldId ? { ...field, ...updates } : field
+  )
+  
+  setFormFields(updatedFormFields)
+  await saveFormFields(updatedFormFields)
+  setEditingField(null)
+  
+  console.log("✅ Field updated successfully")
+}
 
   // Team Management Functions
   const addTeam = () => {
