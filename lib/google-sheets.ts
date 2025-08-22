@@ -113,41 +113,58 @@ class GoogleSheetsService {
 
       const token = await this.getAccessToken()
 
-      const values = [
-        [
-          ticketData.id || `TKT-${Date.now()}`,
-          ticketData.productName || "",
-          ticketData.type || "",
-          ticketData.deliveryTimeline || "",
-          ticketData.teamSelection || "",
-          ticketData.details || "",
-          ticketData.requisitionBreakdown || "",
-          ticketData.priority || "Medium",
-          ticketData.status || "todo",
-          new Date().toISOString(),
-          ticketData.assignee || "",
-          ...Object.keys(ticketData)
-            .filter(
-              (key) =>
-                ![
-                  "id",
-                  "productName",
-                  "type",
-                  "deliveryTimeline",
-                  "teamSelection",
-                  "details",
-                  "requisitionBreakdown",
-                  "priority",
-                  "status",
-                  "assignee",
-                ].includes(key),
-            )
-            .map((key) => {
-              const value = ticketData[key]
-              return Array.isArray(value) ? value.join(", ") : value
-            }),
-        ],
-      ]
+      const headersResponse = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/Sheet1!1:1`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      const headersData = await headersResponse.json()
+      const headers = headersData.values?.[0] || []
+
+      const rowData = new Array(headers.length).fill("")
+
+      Object.keys(ticketData).forEach((key) => {
+        const headerIndex = headers.findIndex(
+          (header: string) =>
+            header.toLowerCase().trim() === key.toLowerCase().trim() ||
+            header
+              .toLowerCase()
+              .replace(/\s+/g, "")
+              .replace(/[^a-z0-9]/gi, "") ===
+              key
+                .toLowerCase()
+                .replace(/\s+/g, "")
+                .replace(/[^a-z0-9]/gi, ""),
+        )
+
+        if (headerIndex !== -1) {
+          const value = ticketData[key]
+          rowData[headerIndex] = Array.isArray(value) ? value.join(", ") : value || ""
+        }
+      })
+
+      const idIndex = headers.findIndex((h: string) => h.toLowerCase().includes("id"))
+      if (idIndex !== -1 && !rowData[idIndex]) {
+        rowData[idIndex] = `TKT-${Date.now()}`
+      }
+
+      const statusIndex = headers.findIndex((h: string) => h.toLowerCase().includes("status"))
+      if (statusIndex !== -1 && !rowData[statusIndex]) {
+        rowData[statusIndex] = "todo"
+      }
+
+      const dateIndex = headers.findIndex(
+        (h: string) => h.toLowerCase().includes("date") || h.toLowerCase().includes("created"),
+      )
+      if (dateIndex !== -1 && !rowData[dateIndex]) {
+        rowData[dateIndex] = new Date().toISOString()
+      }
+
+      const values = [rowData]
 
       const response = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/Sheet1:append?valueInputOption=RAW`,
@@ -201,20 +218,31 @@ class GoogleSheetsService {
         return []
       }
 
-      // Skip header row and convert to ticket objects
-      const tickets = data.values.slice(1).map((row: any[]) => ({
-        id: row[0] || "",
-        productName: row[1] || "",
-        type: row[2] || "",
-        deliveryTimeline: row[3] || "",
-        teamSelection: row[4] || "",
-        details: row[5] || "",
-        requisitionBreakdown: row[6] || "",
-        priority: row[7] || "Medium",
-        status: row[8] || "todo",
-        createdDate: row[9] || "",
-        assignee: row[10] || "",
-      }))
+      const headers = data.values[0]
+      const tickets = data.values.slice(1).map((row: any[]) => {
+        const ticket: any = {}
+
+        headers.forEach((header: string, index: number) => {
+          const cleanHeader = header
+            .toLowerCase()
+            .replace(/\s+/g, "")
+            .replace(/[^a-z0-9]/gi, "")
+          let fieldName = header
+
+          // Map common field names
+          if (cleanHeader.includes("product") && cleanHeader.includes("name")) fieldName = "productName"
+          else if (cleanHeader.includes("delivery") && cleanHeader.includes("timeline")) fieldName = "deliveryTimeline"
+          else if (cleanHeader.includes("team") && cleanHeader.includes("selection")) fieldName = "teamSelection"
+          else if (cleanHeader.includes("requisition") && cleanHeader.includes("breakdown"))
+            fieldName = "requisitionBreakdown"
+          else if (cleanHeader.includes("created") && cleanHeader.includes("date")) fieldName = "createdDate"
+          else fieldName = header.replace(/\s+/g, "").toLowerCase()
+
+          ticket[fieldName] = row[index] || ""
+        })
+
+        return ticket
+      })
 
       return tickets
     } catch (error) {
