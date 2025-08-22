@@ -30,14 +30,8 @@ import {
   LayoutGrid,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-
-interface FormField {
-  id: string
-  label: string
-  type: "text" | "textarea" | "select" | "date" | "url" | "checkbox"
-  required: boolean
-  options?: string[]
-}
+import { FormField } from "@/lib/google-sheets"
+import { googleSheetsService } from "@/lib/google-sheets"
 
 interface Team {
   id: string
@@ -86,46 +80,7 @@ interface Project {
 export default function AdminPanel() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [formFields, setFormFields] = useState<FormField[]>([
-    {
-      id: "productName",
-      label: "Product/Course/Requisition Name",
-      type: "text",
-      required: true,
-    },
-    {
-      id: "type",
-      label: "Type",
-      type: "select",
-      required: true,
-      options: ["Marketing", "Technical", "Operations", "Design", "Content", "Research", "Support"],
-    },
-    {
-      id: "deliveryTimeline",
-      label: "Delivery Timeline",
-      type: "date",
-      required: true,
-    },
-    {
-      id: "teamSelection",
-      label: "Team Selection",
-      type: "select",
-      required: true,
-      options: ["Digital Marketing", "DevOps", "Customer Success", "Product Management"],
-    },
-    {
-      id: "details",
-      label: "Details",
-      type: "textarea",
-      required: true,
-    },
-    {
-      id: "requisitionBreakdown",
-      label: "Requisition Breakdown (Google Sheet/Docs Link)",
-      type: "url",
-      required: false,
-    },
-  ])
+  const [formFields, setFormFields] = useState<FormField[]>([])
   const [teams, setTeams] = useState<Team[]>([
     {
       id: "1",
@@ -205,7 +160,25 @@ export default function AdminPanel() {
       }
     }
 
+    const fetchFormFields = async () => {
+      try {
+        const response = await fetch("/api/form-fields")
+        if (response.ok) {
+          const data = await response.json()
+          setFormFields(data.formFields || [])
+        } else {
+          console.error("Failed to fetch form fields from API")
+          // Fallback to mock data or default fields if API fails
+          setFormFields(googleSheetsService.getMockFormFields())
+        }
+      } catch (error) {
+        console.error("Error fetching form fields:", error)
+        setFormFields(googleSheetsService.getMockFormFields())
+      }
+    }
+
     fetchTickets()
+    fetchFormFields()
   }, [])
 
   useEffect(() => {
@@ -231,7 +204,7 @@ export default function AdminPanel() {
   }
 
   // Form Field Management Functions
-  const addFormField = () => {
+  const addFormField = async () => {
     if (newField.label) {
       const field: FormField = {
         id: `field_${Date.now()}`,
@@ -240,19 +213,42 @@ export default function AdminPanel() {
         required: newField.required || false,
         options: newField.options,
       }
-      setFormFields((prev) => [...prev, field])
+      const updatedFormFields = [...formFields, field]
+      setFormFields(updatedFormFields)
+      await saveFormFields(updatedFormFields)
       setNewField({ label: "", type: "text", required: false })
       setShowAddField(false)
     }
   }
 
-  const removeFormField = (fieldId: string) => {
-    setFormFields((prev) => prev.filter((field) => field.id !== fieldId))
+  const removeFormField = async (fieldId: string) => {
+    const updatedFormFields = formFields.filter((field) => field.id !== fieldId)
+    setFormFields(updatedFormFields)
+    await saveFormFields(updatedFormFields)
   }
 
-  const updateFormField = (fieldId: string, updates: Partial<FormField>) => {
-    setFormFields((prev) => prev.map((field) => (field.id === fieldId ? { ...field, ...updates } : field)))
+  const updateFormField = async (fieldId: string, updates: Partial<FormField>) => {
+    const updatedFormFields = formFields.map((field) => (field.id === fieldId ? { ...field, ...updates } : field))
+    setFormFields(updatedFormFields)
+    await saveFormFields(updatedFormFields)
     setEditingField(null)
+  }
+
+  const saveFormFields = async (fields: FormField[]) => {
+    try {
+      const response = await fetch("/api/form-fields", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ formFields: fields }),
+      })
+      if (!response.ok) {
+        console.error("Failed to save form fields to API")
+      }
+    } catch (error) {
+      console.error("Error saving form fields:", error)
+    }
   }
 
   // Team Management Functions
