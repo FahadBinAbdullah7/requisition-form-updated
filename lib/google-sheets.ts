@@ -230,6 +230,197 @@ export default function AdminPanel() {
     return null
   }
 
+  // Add these methods to your existing GoogleSheetsService class
+
+async saveFormFields(formFields: FormField[]): Promise<boolean> {
+  try {
+    if (!this.config?.spreadsheetId) {
+      console.log("[v0] Google Sheets not configured, saving to localStorage")
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('formFields', JSON.stringify(formFields))
+      }
+      return true
+    }
+
+    const token = await this.getAccessToken()
+
+    // Try to clear existing form fields data (assuming Sheet2 for form fields)
+    try {
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/FormFields!A:Z:clear`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    } catch (clearError) {
+      console.log("[v0] FormFields sheet may not exist, creating new data")
+    }
+
+    // Prepare headers
+    const headers = ["ID", "Label", "Type", "Required", "Options"]
+    
+    // Prepare data rows
+    const rows = formFields.map(field => [
+      field.id,
+      field.label,
+      field.type,
+      field.required ? "TRUE" : "FALSE",
+      field.options ? field.options.join("|") : ""
+    ])
+
+    const values = [headers, ...rows]
+
+    // Write new data
+    const response = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/FormFields!A1?valueInputOption=RAW`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ values }),
+      }
+    )
+
+    if (!response.ok) {
+      console.error("[v0] Failed to save form fields to Google Sheets")
+      // Fallback to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('formFields', JSON.stringify(formFields))
+      }
+      return false
+    }
+
+    console.log("[v0] Successfully saved form fields to Google Sheets")
+    return true
+  } catch (error) {
+    console.error("[v0] Error saving form fields:", error)
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('formFields', JSON.stringify(formFields))
+    }
+    return false
+  }
+}
+
+async getFormFields(): Promise<FormField[]> {
+  try {
+    if (!this.config?.spreadsheetId) {
+      console.log("[v0] Google Sheets not configured, loading from localStorage")
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('formFields')
+        return stored ? JSON.parse(stored) : this.getMockFormFields()
+      }
+      return this.getMockFormFields()
+    }
+
+    const token = await this.getAccessToken()
+
+    const response = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/FormFields`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
+
+    const data = await response.json()
+
+    if (!data.values || data.values.length < 2) {
+      // No data, return localStorage or mock fields
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('formFields')
+        if (stored) {
+          return JSON.parse(stored)
+        }
+      }
+      return this.getMockFormFields()
+    }
+
+    const headers = data.values[0]
+    const formFields = data.values.slice(1).map((row: any[]) => {
+      return {
+        id: row[0] || `field_${Date.now()}`,
+        label: row[1] || "",
+        type: (row[2] || "text") as FormField["type"],
+        required: row[3] === "TRUE",
+        options: row[4] ? row[4].split("|").filter(Boolean) : undefined
+      }
+    })
+
+    // Also save to localStorage as backup
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('formFields', JSON.stringify(formFields))
+    }
+
+    return formFields
+  } catch (error) {
+    console.error("[v0] Error reading form fields from Google Sheets:", error)
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('formFields')
+      return stored ? JSON.parse(stored) : this.getMockFormFields()
+    }
+    return this.getMockFormFields()
+  }
+}
+
+getMockFormFields(): FormField[] {
+  return [
+    {
+      id: "field_1",
+      label: "Product Name",
+      type: "text",
+      required: true,
+    },
+    {
+      id: "field_2",
+      label: "Request Type",
+      type: "select",
+      required: true,
+      options: ["Marketing", "Technical", "Operations", "Design"],
+    },
+    {
+      id: "field_3",
+      label: "Priority Level",
+      type: "select",
+      required: true,
+      options: ["Low", "Medium", "High", "Critical"],
+    },
+    {
+      id: "field_4",
+      label: "Delivery Timeline",
+      type: "date",
+      required: true,
+    },
+    {
+      id: "field_5",
+      label: "Team Selection",
+      type: "select",
+      required: true,
+      options: ["Digital Marketing", "DevOps", "Customer Success", "Product Management", "UX/UI Design"],
+    },
+    {
+      id: "field_6",
+      label: "Detailed Requirements",
+      type: "textarea",
+      required: true,
+    },
+    {
+      id: "field_7",
+      label: "Requisition Breakdown Document",
+      type: "url",
+      required: false,
+    },
+  ]
+}
+
   // Form Field Management Functions
   const addFormField = () => {
     if (newField.label) {
