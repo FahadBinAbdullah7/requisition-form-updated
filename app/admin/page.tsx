@@ -26,6 +26,8 @@ import {
   Eye,
   CheckSquare,
   FolderPlus,
+  FolderOpen,
+  LayoutGrid,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
@@ -77,6 +79,8 @@ interface Project {
   assignedMembers: string[]
   status: "Planning" | "Active" | "Completed"
   createdDate: string
+  priority?: "Low" | "Medium" | "High" | "Urgent"
+  dueDate?: string
 }
 
 export default function AdminPanel() {
@@ -181,50 +185,28 @@ export default function AdminPanel() {
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "Member", team: "" })
   const [showAddUser, setShowAddUser] = useState(false)
-  const [tickets, setTickets] = useState<Ticket[]>([
-    {
-      id: "1",
-      productName: "Website Redesign",
-      type: "Design",
-      priority: "High",
-      status: "In Progress",
-      team: "UX/UI Design",
-      assignee: "Jessica Kim",
-      createdDate: "2024-01-15",
-      details: "Complete redesign of the company website with modern UI/UX principles",
-      deliveryTimeline: "2024-02-15",
-      requisitionBreakdown: "https://docs.google.com/document/d/example",
-    },
-    {
-      id: "2",
-      productName: "Mobile App Development",
-      type: "Technical",
-      priority: "Critical",
-      status: "Open",
-      team: "DevOps",
-      createdDate: "2024-01-20",
-      details: "Develop mobile application for iOS and Android platforms",
-      deliveryTimeline: "2024-03-01",
-    },
-    {
-      id: "3",
-      productName: "Marketing Campaign",
-      type: "Marketing",
-      priority: "Medium",
-      status: "Review",
-      team: "Digital Marketing",
-      assignee: "Sarah Johnson",
-      createdDate: "2024-01-10",
-      details: "Q1 marketing campaign for new product launch",
-      deliveryTimeline: "2024-02-01",
-    },
-  ])
-
+  const [tickets, setTickets] = useState<Ticket[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedTickets, setSelectedTickets] = useState<string[]>([])
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [newProject, setNewProject] = useState({ name: "", description: "" })
+
+  useEffect(() => {
+    const fetchTickets = async () => {
+      try {
+        const response = await fetch("/api/tickets")
+        if (response.ok) {
+          const data = await response.json()
+          setTickets(data.tickets || [])
+        }
+      } catch (error) {
+        console.error("Failed to fetch tickets:", error)
+      }
+    }
+
+    fetchTickets()
+  }, [])
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== "admin")) {
@@ -362,16 +344,51 @@ export default function AdminPanel() {
     )
   }
 
+  const updateProjectPriority = (projectId: string, priority: string) => {
+    setProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId ? { ...project, priority: priority as Project["priority"] } : project,
+      ),
+    )
+  }
+
+  const updateProjectDueDate = (projectId: string, dueDate: string) => {
+    setProjects((prev) =>
+      prev.map((project) => (project.id === projectId ? { ...project, dueDate: dueDate } : project)),
+    )
+  }
+
+  const removeMemberFromProject = (projectId: string, memberId: string) => {
+    setProjects((prev) =>
+      prev.map((project) => ({
+        ...project,
+        assignedMembers: project.assignedMembers.filter((id) => id !== memberId),
+      })),
+    )
+  }
+
+  const createKanbanFromProject = (projectId: string) => {
+    alert(`Kanban board created for project ${projectId}`)
+  }
+
+  const deleteProject = (projectId: string) => {
+    setProjects((prev) => prev.filter((project) => project.id !== projectId))
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <NavigationHeader title="Admin Panel" subtitle="Manage system configuration and users" backUrl="/dashboard" />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <Tabs defaultValue="tasks" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="tasks" className="flex items-center gap-2">
               <CheckSquare className="h-4 w-4" />
               All Tasks
+            </TabsTrigger>
+            <TabsTrigger value="projects" className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Projects
             </TabsTrigger>
             <TabsTrigger value="forms" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -542,92 +559,173 @@ export default function AdminPanel() {
                 </CardContent>
               </Card>
 
-              {projects.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Active Projects</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {projects.map((project) => (
-                        <div key={project.id} className="p-4 border border-border rounded-lg">
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <h3 className="font-medium">{project.name}</h3>
-                              <p className="text-sm text-muted-foreground">{project.description}</p>
-                            </div>
-                            <Badge variant="outline">{project.status}</Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground mb-2">
-                            {project.tickets.length} tickets • {project.assignedMembers.length} assigned members
-                          </div>
-                          <div className="flex gap-2">
-                            <Select onValueChange={(value) => assignMemberToProject(project.id, value)}>
-                              <SelectTrigger className="w-48">
-                                <SelectValue placeholder="Assign member..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {users
-                                  .filter((u) => u.role !== "Admin" && !project.assignedMembers.includes(u.id))
-                                  .map((user) => (
-                                    <SelectItem key={user.id} value={user.id}>
-                                      {user.name} ({user.team})
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      ))}
+              <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Project</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Project Name</Label>
+                      <Input
+                        value={newProject.name}
+                        onChange={(e) => setNewProject((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Enter project name"
+                      />
                     </div>
+                    <div>
+                      <Label>Description</Label>
+                      <Textarea
+                        value={newProject.description}
+                        onChange={(e) => setNewProject((prev) => ({ ...prev, description: e.target.value }))}
+                        placeholder="Enter project description"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label>Selected Tickets ({selectedTickets.length})</Label>
+                      <div className="text-sm text-muted-foreground">
+                        {selectedTickets
+                          .map((ticketId) => {
+                            const ticket = tickets.find((t) => t.id === ticketId)
+                            return ticket ? ticket.productName : ""
+                          })
+                          .join(", ")}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setShowCreateProject(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={createProject}>Create Project</Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="projects" className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Project Management</h2>
+                <p className="text-muted-foreground">Manage projects, assign teams, and create Kanban boards</p>
+              </div>
+            </div>
+
+            <div className="grid gap-6">
+              {projects.map((project) => (
+                <Card key={project.id}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <FolderOpen className="h-5 w-5" />
+                          {project.name}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
+                      </div>
+                      <Badge variant="outline">{project.status}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium">Assign Team Members</Label>
+                        <Select onValueChange={(value) => assignMemberToProject(project.id, value)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select member..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {users
+                              .filter((u) => u.role !== "Admin" && !project.assignedMembers.includes(u.id))
+                              .map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                  {user.name} ({user.team})
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium">Priority</Label>
+                        <Select onValueChange={(value) => updateProjectPriority(project.id, value)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Set priority..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Low">Low</SelectItem>
+                            <SelectItem value="Medium">Medium</SelectItem>
+                            <SelectItem value="High">High</SelectItem>
+                            <SelectItem value="Urgent">Urgent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium">Due Date</Label>
+                        <Input
+                          type="date"
+                          onChange={(e) => updateProjectDueDate(project.id, e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <div className="text-sm text-muted-foreground">
+                        <strong>Assigned Members:</strong>
+                      </div>
+                      {project.assignedMembers.map((memberId) => {
+                        const member = users.find((u) => u.id === memberId)
+                        return member ? (
+                          <Badge key={memberId} variant="secondary" className="flex items-center gap-1">
+                            {member.name}
+                            <button
+                              onClick={() => removeMemberFromProject(project.id, memberId)}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                        ) : null
+                      })}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        {project.tickets.length} tickets • Created {project.createdDate}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => createKanbanFromProject(project.id)}
+                          className="flex items-center gap-2"
+                        >
+                          <LayoutGrid className="h-4 w-4" />
+                          Create Kanban Board
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => deleteProject(project.id)}>
+                          Delete Project
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+
+              {projects.length === 0 && (
+                <Card>
+                  <CardContent className="text-center py-8">
+                    <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No Projects Yet</h3>
+                    <p className="text-muted-foreground mb-4">Create projects from tickets in the "All Tasks" tab</p>
                   </CardContent>
                 </Card>
               )}
             </div>
-
-            <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Project</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Project Name</Label>
-                    <Input
-                      value={newProject.name}
-                      onChange={(e) => setNewProject((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="Enter project name"
-                    />
-                  </div>
-                  <div>
-                    <Label>Description</Label>
-                    <Textarea
-                      value={newProject.description}
-                      onChange={(e) => setNewProject((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="Enter project description"
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label>Selected Tickets ({selectedTickets.length})</Label>
-                    <div className="text-sm text-muted-foreground">
-                      {selectedTickets
-                        .map((ticketId) => {
-                          const ticket = tickets.find((t) => t.id === ticketId)
-                          return ticket ? ticket.productName : ""
-                        })
-                        .join(", ")}
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setShowCreateProject(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={createProject}>Create Project</Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
           </TabsContent>
 
           <TabsContent value="forms">
@@ -994,7 +1092,7 @@ export default function AdminPanel() {
                               <Label>Role</Label>
                               <Select
                                 value={newUser.role}
-                                onValueChange={(value) => setNewUser((prev) => ({ ...prev, role: value }))}
+                                onChange={(value) => setNewUser((prev) => ({ ...prev, role: value }))}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
@@ -1010,7 +1108,7 @@ export default function AdminPanel() {
                               <Label>Team</Label>
                               <Select
                                 value={newUser.team}
-                                onValueChange={(value) => setNewUser((prev) => ({ ...prev, team: value }))}
+                                onChange={(value) => setNewUser((prev) => ({ ...prev, team: value }))}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select team" />
