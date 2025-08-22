@@ -20,6 +20,14 @@ interface TicketData {
   assignee?: string
 }
 
+interface FormField {
+  id: string
+  label: string
+  type: "text" | "textarea" | "select" | "date" | "url" | "checkbox"
+  required: boolean
+  options?: string[]
+}
+
 class GoogleSheetsService {
   private config: GoogleSheetsConfig | null = null
   private accessToken: string | null = null
@@ -328,6 +336,187 @@ class GoogleSheetsService {
       console.error("[v0] Error updating ticket status:", error)
       return false
     }
+  }
+
+  async appendFormFields(formFields: FormField[]): Promise<boolean> {
+    try {
+      if (!this.config?.spreadsheetId) {
+        console.log("[v0] Google Sheets not configured, simulating form fields submission")
+        return true
+      }
+
+      const token = await this.getAccessToken()
+      const range = "FormFields!A:B" // Assuming two columns: id and JSON data
+
+      // Clear existing data before appending new fields
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/${range}:clear`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      const values = formFields.map((field) => [field.id, JSON.stringify(field)])
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/${range}:append?valueInputOption=RAW`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            values,
+          }),
+        },
+      )
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("[v0] Google Sheets API error (appendFormFields):", errorText)
+        return false
+      }
+
+      console.log("[v0] Successfully submitted form fields to Google Sheets")
+      return true
+    } catch (error) {
+      console.error("[v0] Error appending form fields to Google Sheets:", error)
+      return false
+    }
+  }
+
+  async getFormFields(): Promise<FormField[]> {
+    try {
+      if (!this.config?.spreadsheetId) {
+        console.log("[v0] Google Sheets not configured, returning mock form fields")
+        return this.getMockFormFields()
+      }
+
+      const token = await this.getAccessToken()
+      const range = "FormFields!A:B"
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/${range}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      const data = await response.json()
+
+      if (!data.values || data.values.length === 0) {
+        return []
+      }
+
+      const formFields: FormField[] = data.values.map((row: string[]) => {
+        try {
+          // Assuming the second column contains the JSON string of the FormField
+          return JSON.parse(row[1]) as FormField
+        } catch (parseError) {
+          console.error("[v0] Error parsing form field row:", row, parseError)
+          return null
+        }
+      }).filter(Boolean) // Filter out any nulls from parsing errors
+
+      return formFields
+    } catch (error) {
+      console.error("[v0] Error reading form fields from Google Sheets:", error)
+      return this.getMockFormFields()
+    }
+  }
+
+  private getMockFormFields(): FormField[] {
+    return [
+      {
+        id: "productName",
+        label: "Product/Course/Requisition Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "type",
+        label: "Type",
+        type: "select",
+        required: true,
+        options: ["Marketing", "Technical", "Operations", "Design", "Content", "Research", "Support"],
+      },
+      {
+        id: "deliveryTimeline",
+        label: "Delivery Timeline",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "teamSelection",
+        label: "Team Selection",
+        type: "select",
+        required: true,
+        options: [
+          "Digital Marketing",
+          "Content Marketing",
+          "Social Media",
+          "SEO/SEM",
+          "Email Marketing",
+          "DevOps",
+          "Frontend Development",
+          "Backend Development",
+          "Mobile Development",
+          "QA Testing",
+          "Customer Success",
+          "Customer Support",
+          "Sales Operations",
+          "Business Development",
+          "Account Management",
+          "Product Management",
+          "UX/UI Design",
+          "Graphic Design",
+          "Video Production",
+          "Brand Management",
+          "Data Analytics",
+          "Business Intelligence",
+          "Market Research",
+          "Competitive Analysis",
+          "User Research",
+          "Project Management",
+          "Operations",
+          "Supply Chain",
+          "Logistics",
+          "Procurement",
+          "Human Resources",
+          "Talent Acquisition",
+          "Learning & Development",
+          "Employee Relations",
+          "Compensation",
+          "Finance",
+          "Accounting",
+          "Legal",
+          "Compliance",
+          "Risk Management",
+          "IT Support",
+          "Information Security",
+          "Infrastructure",
+          "Cloud Operations",
+        ],
+      },
+      {
+        id: "details",
+        label: "Details",
+        type: "textarea",
+        required: true,
+      },
+      {
+        id: "requisitionBreakdown",
+        label: "Requisition Breakdown (Google Sheet/Docs Link)",
+        type: "url",
+        required: false,
+      },
+    ]
   }
 }
 
