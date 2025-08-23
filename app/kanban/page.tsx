@@ -32,6 +32,7 @@ interface Ticket {
   createdDate: string
   status: "todo" | "in-progress" | "review" | "done"
   tags: string[]
+  selected?: boolean
 }
 
 interface KanbanColumn {
@@ -119,48 +120,59 @@ export default function KanbanBoard() {
     },
   ])
 
-  // Load teams, teamMembers, and project from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Load teams
       const savedTeams = localStorage.getItem("teams")
       if (savedTeams) {
-        const parsedTeams = JSON.parse(savedTeams)
-        setTeams(
-          Array.isArray(parsedTeams)
-            ? parsedTeams.map((team: any) => team.name || "Unknown")
-            : [],
-        )
+        try {
+          const parsedTeams = JSON.parse(savedTeams)
+          setTeams(
+            Array.isArray(parsedTeams)
+              ? parsedTeams.map((team: any) => team.name || "Unknown")
+              : []
+          )
+        } catch (error) {
+          console.error("Failed to parse teams from localStorage:", error)
+          setTeams([])
+        }
       }
 
-      // Load teamMembers (users)
       const savedUsers = localStorage.getItem("users")
       if (savedUsers) {
-        const parsedUsers = JSON.parse(savedUsers)
-        setTeamMembers(
-          Array.isArray(parsedUsers)
-            ? parsedUsers.map((user: any) => ({
-                id: user.id || `user_${Date.now()}`,
-                name: user.name || "Unknown",
-                email: user.email || "",
-                role: user.role || "Member",
-                team: user.team || "Unassigned",
-                status: user.status || "Active",
-              }))
-            : [],
-        )
+        try {
+          const parsedUsers = JSON.parse(savedUsers)
+          setTeamMembers(
+            Array.isArray(parsedUsers)
+              ? parsedUsers.map((user: any) => ({
+                  id: user.id || `user_${Date.now()}`,
+                  name: user.name || "Unknown",
+                  email: user.email || "",
+                  role: user.role || "Member",
+                  team: user.team || "Unassigned",
+                  status: user.status || "Active",
+                }))
+              : []
+          )
+        } catch (error) {
+          console.error("Failed to parse users from localStorage:", error)
+          setTeamMembers([])
+        }
       }
 
-      // Load project if projectId is provided
       if (projectId) {
         const savedProjects = localStorage.getItem("projects")
         if (savedProjects) {
-          const parsedProjects = JSON.parse(savedProjects)
-          const foundProject = parsedProjects.find((p: Project) => p.id === projectId)
-          if (foundProject) {
-            setProject(foundProject)
-          } else {
-            console.error(`Project with ID ${projectId} not found`)
+          try {
+            const parsedProjects = JSON.parse(savedProjects)
+            const foundProject = parsedProjects.find((p: Project) => p.id === projectId)
+            if (foundProject) {
+              setProject(foundProject)
+            } else {
+              console.error(`Project with ID ${projectId} not found`)
+              setProject(null)
+            }
+          } catch (error) {
+            console.error("Failed to parse projects from localStorage:", error)
             setProject(null)
           }
         }
@@ -168,7 +180,6 @@ export default function KanbanBoard() {
     }
   }, [projectId])
 
-  // Load tickets from localStorage or API
   useEffect(() => {
     const loadTickets = async () => {
       try {
@@ -176,7 +187,16 @@ export default function KanbanBoard() {
         if (typeof window !== "undefined") {
           const savedTickets = localStorage.getItem("tickets")
           if (savedTickets) {
-            tickets = JSON.parse(savedTickets)
+            try {
+              tickets = JSON.parse(savedTickets)
+              if (!Array.isArray(tickets)) {
+                console.error("Invalid tickets data in localStorage, resetting to empty array")
+                tickets = []
+              }
+            } catch (error) {
+              console.error("Failed to parse tickets from localStorage:", error)
+              tickets = []
+            }
           }
         }
 
@@ -184,6 +204,8 @@ export default function KanbanBoard() {
         if (response.ok) {
           const data = await response.json()
           tickets = data.tickets || data
+        } else {
+          console.warn("API /api/tickets returned non-200 status:", response.status)
         }
 
         const kanbanTickets = tickets.map((ticket: any) => ({
@@ -215,14 +237,25 @@ export default function KanbanBoard() {
                     ? "done"
                     : "todo",
           tags: [ticket.type || "Promotional", ticket.priority || "Medium"],
+          selected: ticket.selected || false,
         }))
 
-        const filteredTickets = projectId && project
-          ? kanbanTickets.filter((ticket: Ticket) => project.tickets.includes(ticket.id))
-          : kanbanTickets
+        let filteredTickets: Ticket[] = []
+        if (projectId && project) {
+          filteredTickets = kanbanTickets.filter((ticket: Ticket) =>
+            project.tickets.includes(ticket.id)
+          )
+        } else {
+          filteredTickets = kanbanTickets.filter((ticket: Ticket) => ticket.selected)
+        }
 
-        if (projectId && (!project || filteredTickets.length === 0)) {
-          console.warn(`No tickets found for project ${projectId}`)
+        if (filteredTickets.length === 0) {
+          console.warn(
+            `No tickets found. projectId: ${projectId}, project:`,
+            project,
+            "selected tickets:",
+            kanbanTickets.filter((t: Ticket) => t.selected)
+          )
         }
 
         setAvailableTickets(filteredTickets)
@@ -234,6 +267,10 @@ export default function KanbanBoard() {
         )
       } catch (error) {
         console.error("[v0] Failed to load tickets:", error)
+        setAvailableTickets([])
+        setColumns((prevColumns) =>
+          prevColumns.map((column) => ({ ...column, tickets: [] }))
+        )
       }
     }
 
@@ -268,7 +305,10 @@ export default function KanbanBoard() {
   const handleDrop = (e: React.DragEvent, targetColumnId: string) => {
     e.preventDefault()
 
-    if (!draggedTicket) return
+    if (!draggedTicket) {
+      console.warn("No dragged ticket found")
+      return
+    }
 
     const targetStatus = targetColumnId as Ticket["status"]
     const updatedTicket = { ...draggedTicket, status: targetStatus }
@@ -288,24 +328,61 @@ export default function KanbanBoard() {
     )
 
     if (typeof window !== "undefined") {
-      const savedTickets = localStorage.getItem("tickets")
-      const tickets = savedTickets ? JSON.parse(savedTickets) : []
-      const updatedTickets = tickets.map((t: any) =>
-        t.id === draggedTicket.id
-          ? {
-              ...t,
-              status:
-                targetStatus === "todo"
-                  ? "Open"
-                  : targetStatus === "in-progress"
-                    ? "In Progress"
-                    : targetStatus === "review"
-                      ? "Review"
-                      : "Completed",
-            }
-          : t
-      )
-      localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+      try {
+        const savedTickets = localStorage.getItem("tickets")
+        let tickets = savedTickets ? JSON.parse(savedTickets) : []
+        if (!Array.isArray(tickets)) {
+          console.error("Invalid tickets data in localStorage, resetting to empty array")
+          tickets = []
+        }
+
+        const updatedTickets = tickets.map((t: any) =>
+          t.id === draggedTicket.id
+            ? {
+                ...t,
+                status:
+                  targetStatus === "todo"
+                    ? "Open"
+                    : targetStatus === "in-progress"
+                      ? "In Progress"
+                      : targetStatus === "review"
+                        ? "Review"
+                        : "Completed",
+                selected: true,
+              }
+            : t
+        )
+
+        if (!updatedTickets.some((t: any) => t.id === draggedTicket.id)) {
+          console.warn(`Ticket ${draggedTicket.id} not found in localStorage, adding it`)
+          updatedTickets.push({
+            id: draggedTicket.id,
+            productName: draggedTicket.title,
+            details: draggedTicket.description,
+            type: draggedTicket.type,
+            priority: draggedTicket.priority,
+            assignee: draggedTicket.assignee.name,
+            submitterName: draggedTicket.assignee.name,
+            team: draggedTicket.team,
+            deliveryTimeline: draggedTicket.dueDate,
+            createdDate: draggedTicket.createdDate,
+            status:
+              targetStatus === "todo"
+                ? "Open"
+                : targetStatus === "in-progress"
+                  ? "In Progress"
+                  : targetStatus === "review"
+                    ? "Review"
+                    : "Completed",
+            selected: true,
+          })
+        }
+
+        localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+        console.log(`Updated ticket ${draggedTicket.id} to status ${targetStatus} in localStorage`)
+      } catch (error) {
+        console.error("Failed to update localStorage:", error)
+      }
     }
 
     setDraggedTicket(null)
@@ -323,22 +400,26 @@ export default function KanbanBoard() {
       setAvailableTickets((prev) => prev.filter((ticket) => ticket.id !== ticketId))
 
       if (typeof window !== "undefined") {
-        const savedTickets = localStorage.getItem("tickets")
-        const tickets = savedTickets ? JSON.parse(savedTickets) : []
-        const updatedTickets = tickets.filter((t: any) => t.id !== ticketId)
-        localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+        try {
+          const savedTickets = localStorage.getItem("tickets")
+          const tickets = savedTickets ? JSON.parse(savedTickets) : []
+          const updatedTickets = tickets.filter((t: any) => t.id !== ticketId)
+          localStorage.setItem("tickets", JSON.stringify(updatedTickets))
 
-        const savedProjects = localStorage.getItem("projects")
-        if (savedProjects) {
-          const projects = JSON.parse(savedProjects)
-          const updatedProjects = projects.map((p: Project) => ({
-            ...p,
-            tickets: p.tickets.filter((id: string) => id !== ticketId),
-          }))
-          localStorage.setItem("projects", JSON.stringify(updatedProjects))
-          if (project && projectId === p.id) {
-            setProject({ ...project, tickets: project.tickets.filter((id) => id !== ticketId) })
+          const savedProjects = localStorage.getItem("projects")
+          if (savedProjects) {
+            const projects = JSON.parse(savedProjects)
+            const updatedProjects = projects.map((p: Project) => ({
+              ...p,
+              tickets: p.tickets.filter((id: string) => id !== ticketId),
+            }))
+            localStorage.setItem("projects", JSON.stringify(updatedProjects))
+            if (project && project.id === projectId) {
+              setProject({ ...project, tickets: project.tickets.filter((id) => id !== ticketId) })
+            }
           }
+        } catch (error) {
+          console.error("Failed to update localStorage on delete:", error)
         }
       }
     }
@@ -351,7 +432,10 @@ export default function KanbanBoard() {
     }
 
     const assignedMember = teamMembers.find((member) => member.id === newTask.assignee)
-    if (!assignedMember) return
+    if (!assignedMember) {
+      console.error("Assigned member not found")
+      return
+    }
 
     const task: Ticket = {
       id: `TKT-${Date.now()}`,
@@ -373,6 +457,7 @@ export default function KanbanBoard() {
       createdDate: new Date().toISOString().split("T")[0],
       status: "todo",
       tags: [newTask.type, newTask.priority],
+      selected: true,
     }
 
     setColumns((prevColumns) =>
@@ -382,32 +467,38 @@ export default function KanbanBoard() {
     setAvailableTickets((prev) => [...prev, task])
 
     if (typeof window !== "undefined") {
-      const savedTickets = localStorage.getItem("tickets")
-      const tickets = savedTickets ? JSON.parse(savedTickets) : []
-      const newTicket = {
-        id: task.id,
-        productName: task.title,
-        details: task.description,
-        type: task.type,
-        priority: task.priority,
-        assignee: task.assignee.name,
-        submitterName: task.assignee.name,
-        team: task.team,
-        deliveryTimeline: task.dueDate,
-        createdDate: task.createdDate,
-        status: "Open",
-      }
-      tickets.push(newTicket)
-      localStorage.setItem("tickets", JSON.stringify(tickets))
+      try {
+        const savedTickets = localStorage.getItem("tickets")
+        const tickets = savedTickets ? JSON.parse(savedTickets) : []
+        const newTicket = {
+          id: task.id,
+          productName: task.title,
+          details: task.description,
+          type: task.type,
+          priority: task.priority,
+          assignee: task.assignee.name,
+          submitterName: task.assignee.name,
+          team: task.team,
+          deliveryTimeline: task.dueDate,
+          createdDate: task.createdDate,
+          status: "Open",
+          selected: true,
+        }
+        tickets.push(newTicket)
+        localStorage.setItem("tickets", JSON.stringify(tickets))
 
-      if (projectId && project) {
-        const savedProjects = localStorage.getItem("projects")
-        const projects = savedProjects ? JSON.parse(savedProjects) : []
-        const updatedProjects = projects.map((p: Project) =>
-          p.id === projectId ? { ...p, tickets: [...p.tickets, task.id] } : p
-        )
-        localStorage.setItem("projects", JSON.stringify(updatedProjects))
-        setProject((prev) => (prev ? { ...prev, tickets: [...prev.tickets, task.id] } : prev))
+        if (projectId && project) {
+          const savedProjects = localStorage.getItem("projects")
+          const projects = savedProjects ? JSON.parse(savedProjects) : []
+          const updatedProjects = projects.map((p: Project) =>
+            p.id === projectId ? { ...p, tickets: [...p.tickets, task.id] } : p
+          )
+          localStorage.setItem("projects", JSON.stringify(updatedProjects))
+          setProject((prev) => (prev ? { ...prev, tickets: [...prev.tickets, task.id] } : prev))
+          console.log(`Added ticket ${task.id} to project ${projectId} in localStorage`)
+        }
+      } catch (error) {
+        console.error("Failed to update localStorage for new task:", error)
       }
     }
 
@@ -431,7 +522,7 @@ export default function KanbanBoard() {
 
     const projectTickets = availableTickets
       .filter((ticket) => selectedTickets.includes(ticket.id))
-      .map((ticket) => ({ ...ticket, status: "todo" }))
+      .map((ticket) => ({ ...ticket, status: "todo", selected: true }))
 
     setColumns((prevColumns) =>
       prevColumns.map((column) =>
@@ -442,30 +533,35 @@ export default function KanbanBoard() {
     )
 
     setAvailableTickets((prev) =>
-      prev.map((ticket) => (selectedTickets.includes(ticket.id) ? { ...ticket, status: "todo" } : ticket))
+      prev.map((ticket) => (selectedTickets.includes(ticket.id) ? { ...ticket, status: "todo", selected: true } : ticket))
     )
 
     if (typeof window !== "undefined") {
-      const savedTickets = localStorage.getItem("tickets")
-      const tickets = savedTickets ? JSON.parse(savedTickets) : []
-      const updatedTickets = tickets.map((t: any) =>
-        selectedTickets.includes(t.id) ? { ...t, status: "Open" } : t
-      )
-      localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+      try {
+        const savedTickets = localStorage.getItem("tickets")
+        const tickets = savedTickets ? JSON.parse(savedTickets) : []
+        const updatedTickets = tickets.map((t: any) =>
+          selectedTickets.includes(t.id) ? { ...t, status: "Open", selected: true } : t
+        )
+        localStorage.setItem("tickets", JSON.stringify(updatedTickets))
 
-      const savedProjects = localStorage.getItem("projects")
-      const projects = savedProjects ? JSON.parse(savedProjects) : []
-      const newProject: Project = {
-        id: `project_${Date.now()}`,
-        name: projectName,
-        description: "",
-        tickets: selectedTickets,
-        assignedMembers: [],
-        status: "Planning",
-        createdDate: new Date().toISOString().split("T")[0],
+        const savedProjects = localStorage.getItem("projects")
+        const projects = savedProjects ? JSON.parse(savedProjects) : []
+        const newProject: Project = {
+          id: `project_${Date.now()}`,
+          name: projectName,
+          description: "",
+          tickets: selectedTickets,
+          assignedMembers: [],
+          status: "Planning",
+          createdDate: new Date().toISOString().split("T")[0],
+        }
+        projects.push(newProject)
+        localStorage.setItem("projects", JSON.stringify(projects))
+        console.log(`Created project ${newProject.id} with ${selectedTickets.length} selected tickets`)
+      } catch (error) {
+        console.error("Failed to update localStorage for new project:", error)
       }
-      projects.push(newProject)
-      localStorage.setItem("projects", JSON.stringify(projects))
     }
 
     setProjectName("")
