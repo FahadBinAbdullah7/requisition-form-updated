@@ -384,19 +384,6 @@ export default function AdminPanel() {
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [newProject, setNewProject] = useState({ name: "", description: "" })
-
-  // Helper function to sort tickets by creation date (most recent first)
-  const getSortedTickets = () => {
-    return [...tickets].sort((a, b) => {
-      // Convert date strings to Date objects for comparison
-      const dateA = new Date(a.createdDate)
-      const dateB = new Date(b.createdDate)
-      
-      // Sort in descending order (newest first)
-      return dateB.getTime() - dateA.getTime()
-    })
-  }
-
   const handleStatusChange = async (ticketId: string, newStatus: string) => {
     try {
       const response = await fetch(`/api/tickets/${ticketId}/status`, {
@@ -680,9 +667,6 @@ const createKanbanFromProject = (projectId: string) => {
     setProjects((prev) => prev.filter((project) => project.id !== projectId))
   }
 
-  // Get sorted tickets for display
-  const sortedTickets = getSortedTickets()
-
   return (
     <div className="min-h-screen bg-background">
       <NavigationHeader title="Admin Panel" subtitle="Manage system configuration and users" backUrl="/dashboard" />
@@ -723,7 +707,7 @@ const createKanbanFromProject = (projectId: string) => {
                   <div>
                     <CardTitle>All Tickets & Projects</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Manage tickets and create projects ({tickets.length} tickets, {projects.length} projects) • Showing newest first
+                      Manage tickets and create projects ({tickets.length} tickets, {projects.length} projects)
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -739,7 +723,7 @@ const createKanbanFromProject = (projectId: string) => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {sortedTickets.map((ticket) => (
+                    {tickets.map((ticket) => (
                       <div key={ticket.id} className="flex items-center gap-4 p-4 border border-border rounded-lg">
                         <input
                           type="checkbox"
@@ -780,7 +764,7 @@ const createKanbanFromProject = (projectId: string) => {
                             </Badge>
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            Team: {ticket.team} • Due: {ticket.deliveryTimeline} • Created: {ticket.createdDate}
+                            Team: {ticket.team} • Due: {ticket.deliveryTimeline}
                             {ticket.assignee && ` • Assigned to: ${ticket.assignee}`}
                           </div>
                         </div>
@@ -788,6 +772,84 @@ const createKanbanFromProject = (projectId: string) => {
                           <Select onValueChange={(value) => assignTicketToMember(ticket.id, value)}>
                             <SelectTrigger className="w-40">
                               <SelectValue placeholder="Assign to..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {users
+                                .filter((u) => u.role !== "Admin")
+                                .map((user) => (
+                                  <SelectItem key={user.id} value={user.id}>
+                                    {user.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm" onClick={() => setViewingTicket(ticket)}>
+                                <Eye className="h-4 w-4" />
+                                View Details
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl">
+                              <DialogHeader>
+                                <DialogTitle>{ticket.productName}</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <Label>Type</Label>
+                                    <p className="text-sm">{ticket.type}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Priority</Label>
+                                    <p className="text-sm">{ticket.priority}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Status</Label>
+                                    <p className="text-sm">{ticket.status}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Team</Label>
+                                    <p className="text-sm">{ticket.team}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Delivery Timeline</Label>
+                                    <p className="text-sm">{ticket.deliveryTimeline}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Created Date</Label>
+                                    <p className="text-sm">{ticket.createdDate}</p>
+                                  </div>
+                                </div>
+                                <div>
+                                  <Label>Details</Label>
+                                  <p className="text-sm mt-1">{ticket.details}</p>
+                                </div>
+                                {ticket.requisitionBreakdown && (
+                                  <div>
+                                    <Label>Requisition Breakdown</Label>
+                                    <a
+                                      href={ticket.requisitionBreakdown}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sm text-blue-600 hover:underline block mt-1"
+                                    >
+                                      View Document
+                                    </a>
+                                  </div>
+                                )}
+                                {ticket.assignee && (
+                                  <div>
+                                    <Label>Assigned To</Label>
+                                    <p className="text-sm">{ticket.assignee}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                           <Select onValueChange={(value) => handleStatusChange(ticket.id, value)} value={ticket.status}>
+                            <SelectTrigger className="w-[180px]">
+                              <SelectValue placeholder="Update Status" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="todo">To Do</SelectItem>
@@ -1353,754 +1415,6 @@ const createKanbanFromProject = (projectId: string) => {
                               <Select
                                 value={newUser.team}
                                 onValueChange={(value) => setNewUser((prev) => ({ ...prev, team: value }))}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select team" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {teams.map((team) => (
-                                    <SelectItem key={team.id} value={team.name}>
-                                      {team.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setShowAddUser(false)}>
-                              Cancel
-                            </Button>
-                            <Button size="sm" onClick={addUser}>
-                              Add User
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="settings">
-            <div className="grid gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Google Sheets Integration</CardTitle>
-                  <p className="text-sm text-muted-foreground">Configure Google Sheets API for form submissions</p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Spreadsheet ID</Label>
-                    <Input placeholder="Enter Google Sheets ID" />
-                  </div>
-                  <div>
-                    <Label>Service Account Key</Label>
-                    <Textarea placeholder="Paste service account JSON key" rows={4} />
-                  </div>
-                  <Button className="flex items-center gap-2">
-                    <Database className="h-4 w-4" />
-                    Test Connection
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>System Configuration</CardTitle>
-                  <p className="text-sm text-muted-foreground">General system settings and preferences</p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Default Priority Level</Label>
-                    <Select defaultValue="Medium">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Low">Low</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                        <SelectItem value="Critical">Critical</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Auto-assign Tickets</Label>
-                    <Select defaultValue="manual">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="manual">Manual Assignment</SelectItem>
-                        <SelectItem value="round-robin">Round Robin</SelectItem>
-                        <SelectItem value="workload">Based on Workload</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button className="flex items-center gap-2">
-                    <Save className="h-4 w-4" />
-                    Save Settings
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
-  )
-}
-                              {users
-                                .filter((u) => u.role !== "Admin")
-                                .map((user) => (
-                                  <SelectItem key={user.id} value={user.id}>
-                                    {user.name}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button variant="outline" size="sm" onClick={() => setViewingTicket(ticket)}>
-                                <Eye className="h-4 w-4" />
-                                View Details
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-2xl">
-                              <DialogHeader>
-                                <DialogTitle>{ticket.productName}</DialogTitle>
-                              </DialogHeader>
-                              <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <Label>Type</Label>
-                                    <p className="text-sm">{ticket.type}</p>
-                                  </div>
-                                  <div>
-                                    <Label>Priority</Label>
-                                    <p className="text-sm">{ticket.priority}</p>
-                                  </div>
-                                  <div>
-                                    <Label>Status</Label>
-                                    <p className="text-sm">{ticket.status}</p>
-                                  </div>
-                                  <div>
-                                    <Label>Team</Label>
-                                    <p className="text-sm">{ticket.team}</p>
-                                  </div>
-                                  <div>
-                                    <Label>Delivery Timeline</Label>
-                                    <p className="text-sm">{ticket.deliveryTimeline}</p>
-                                  </div>
-                                  <div>
-                                    <Label>Created Date</Label>
-                                    <p className="text-sm">{ticket.createdDate}</p>
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label>Details</Label>
-                                  <p className="text-sm mt-1">{ticket.details}</p>
-                                </div>
-                                {ticket.requisitionBreakdown && (
-                                  <div>
-                                    <Label>Requisition Breakdown</Label>
-                                    <a
-                                      href={ticket.requisitionBreakdown}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-sm text-blue-600 hover:underline block mt-1"
-                                    >
-                                      View Document
-                                    </a>
-                                  </div>
-                                )}
-                                {ticket.assignee && (
-                                  <div>
-                                    <Label>Assigned To</Label>
-                                    <p className="text-sm">{ticket.assignee}</p>
-                                  </div>
-                                )}
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                            <Select onValueChange={(value) => handleStatusChange(ticket.id, value)} value={ticket.status}>
-                              <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Update Status" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="todo">To Do</SelectItem>
-                                <SelectItem value="in-progress">In Progress</SelectItem>
-                                <SelectItem value="review">Review</SelectItem>
-                                <SelectItem value="done">Done</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create New Project</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Project Name</Label>
-                      <Input
-                        value={newProject.name}
-                        onChange={(e) => setNewProject((prev) => ({ ...prev, name: e.target.value }))}
-                        placeholder="Enter project name"
-                      />
-                    </div>
-                    <div>
-                      <Label>Description</Label>
-                      <Textarea
-                        value={newProject.description}
-                        onChange={(e) => setNewProject((prev) => ({ ...prev, description: e.target.value }))}
-                        placeholder="Enter project description"
-                        rows={3}
-                      />
-                    </div>
-                    <div>
-                      <Label>Selected Tickets ({selectedTickets.length})</Label>
-                      <div className="text-sm text-muted-foreground">
-                        {selectedTickets
-                          .map((ticketId) => {
-                            const ticket = tickets.find((t) => t.id === ticketId)
-                            return ticket ? ticket.productName : ""
-                          })
-                          .join(", ")}
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setShowCreateProject(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={createProject}>Create Project</Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="projects" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">Project Management</h2>
-                <p className="text-muted-foreground">Manage projects, assign teams, and create Kanban boards</p>
-              </div>
-            </div>
-
-            <div className="grid gap-6">
-              {projects.map((project) => (
-                <Card key={project.id}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <FolderOpen className="h-5 w-5" />
-                          {project.name}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
-                      </div>
-                      <Badge variant="outline">{project.status}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium">Assign Team Members</Label>
-                        <Select onValueChange={(value) => assignMemberToProject(project.id, value)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select member..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {users
-                              .filter((u) => u.role !== "Admin" && !project.assignedMembers.includes(u.id))
-                              .map((user) => (
-                                <SelectItem key={user.id} value={user.id}>
-                                  {user.name} ({user.team})
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label className="text-sm font-medium">Priority</Label>
-                        <Select onValueChange={(value) => updateProjectPriority(project.id, value)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Set priority..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Low">Low</SelectItem>
-                            <SelectItem value="Medium">Medium</SelectItem>
-                            <SelectItem value="High">High</SelectItem>
-                            <SelectItem value="Urgent">Urgent</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label className="text-sm font-medium">Due Date</Label>
-                        <Input
-                          type="date"
-                          onChange={(e) => updateProjectDueDate(project.id, e.target.value)}
-                          className="w-full"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <div className="text-sm text-muted-foreground">
-                        <strong>Assigned Members:</strong>
-                      </div>
-                      {project.assignedMembers.map((memberId) => {
-                        const member = users.find((u) => u.id === memberId)
-                        return member ? (
-                          <Badge key={memberId} variant="secondary" className="flex items-center gap-1">
-                            {member.name}
-                            <button
-                              onClick={() => removeMemberFromProject(project.id, memberId)}
-                              className="ml-1 hover:text-destructive"
-                            >
-                              ×
-                            </button>
-                          </Badge>
-                        ) : null
-                      })}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t">
-                      <div className="text-sm text-muted-foreground">
-                        {project.tickets.length} tickets • Created {project.createdDate}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => createKanbanFromProject(project.id)}
-                          className="flex items-center gap-2"
-                        >
-                          <LayoutGrid className="h-4 w-4" />
-                          Create Kanban Board
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => deleteProject(project.id)}>
-                          Delete Project
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              {projects.length === 0 && (
-                <Card>
-                  <CardContent className="text-center py-8">
-                    <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No Projects Yet</h3>
-                    <p className="text-muted-foreground mb-4">Create projects from tickets in the "All Tasks" tab</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="forms">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Dynamic Form Fields</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Manage the fields that appear in the ticket creation form
-                  </p>
-                </div>
-                <Button onClick={() => setShowAddField(true)} className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Field
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {loadingFormFields && <p>Loading form fields...</p>}
-                {errorFormFields && <p className="text-destructive">Error: {errorFormFields}</p>}
-                {!loadingFormFields && !errorFormFields && formFields.length === 0 && (
-                  <p className="text-muted-foreground">No form fields defined. Click "Add Field" to create one.</p>
-                )}
-                {!loadingFormFields && !errorFormFields && (
-                  <div className="space-y-4">
-                    {formFields.map((field) => (
-                      <div
-                        key={field.id}
-                        className="flex items-center justify-between p-4 border border-border rounded-lg"
-                      >
-                        {editingField === field.id ? (
-                          <div className="flex-1 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label>Field Label</Label>
-                                <Input
-                                  defaultValue={field.label}
-                                  onChange={(e) => updateFormField(field.id, { label: e.target.value })}
-                                  placeholder="Enter field label"
-                                />
-                              </div>
-                              <div>
-                                <Label>Field Type</Label>
-                                <Select
-                                  defaultValue={field.type}
-                                  onValueChange={(value) =>
-                                    updateFormField(field.id, { type: value as FormField["type"] })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="text">Text</SelectItem>
-                                    <SelectItem value="textarea">Textarea</SelectItem>
-                                    <SelectItem value="select">Select</SelectItem>
-                                    <SelectItem value="checkbox">Checkbox</SelectItem>
-                                    <SelectItem value="date">Date</SelectItem>
-                                    <SelectItem value="url">URL</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            {(field.type === "select" || field.type === "checkbox") && (
-                              <div>
-                                <Label>Options (comma-separated)</Label>
-                                <Input
-                                  defaultValue={field.options?.join(", ") || ""}
-                                  onChange={(e) =>
-                                    updateFormField(field.id, {
-                                      options: e.target.value.split(",").map((opt) => opt.trim()),
-                                    })
-                                  }
-                                  placeholder="Option 1, Option 2, Option 3"
-                                />
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between">
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  defaultChecked={field.required}
-                                  onChange={(e) => updateFormField(field.id, { required: e.target.checked })}
-                                  className="rounded border-border"
-                                />
-                                <span className="text-sm">Required field</span>
-                              </label>
-                              <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => setEditingField(null)}>
-                                  Cancel
-                                </Button>
-                                <Button size="sm" onClick={() => setEditingField(null)}>
-                                  <Save className="h-4 w-4 mr-2" />
-                                  Save
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3">
-                                <h3 className="font-medium">{field.label}</h3>
-                                <Badge variant="outline">{field.type}</Badge>
-                                {field.required && <Badge variant="secondary">Required</Badge>}
-                              </div>
-                              {field.options && (
-                                <p className="text-sm text-muted-foreground mt-1">Options: {field.options.join(", ")}</p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="sm" onClick={() => setEditingField(field.id)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeFormField(field.id)}
-                                className="text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-
-                    {showAddField && (
-                      <Card className="border-dashed">
-                        <CardContent className="pt-6">
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label>Field Label</Label>
-                                <Input
-                                  value={newField.label || ""}
-                                  onChange={(e) => setNewField((prev) => ({ ...prev, label: e.target.value }))}
-                                  placeholder="Enter field label"
-                                />
-                              </div>
-                              <div>
-                                <Label>Field Type</Label>
-                                <Select
-                                  value={newField.type || "text"}
-                                  onValueChange={(value) =>
-                                    setNewField((prev) => ({ ...prev, type: value as FormField["type"] }))
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="text">Text</SelectItem>
-                                    <SelectItem value="textarea">Textarea</SelectItem>
-                                    <SelectItem value="select">Select</SelectItem>
-                                    <SelectItem value="checkbox">Checkbox</SelectItem>
-                                    <SelectItem value="date">Date</SelectItem>
-                                    <SelectItem value="url">URL</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            {(newField.type === "select" || newField.type === "checkbox") && (
-                              <div>
-                                <Label>Options (comma-separated)</Label>
-                                <Input
-                                  value={newField.options?.join(", ") || ""}
-                                  onChange={(e) =>
-                                    setNewField((prev) => ({
-                                      ...prev,
-                                      options: e.target.value.split(",").map((opt) => opt.trim()),
-                                    }))
-                                  }
-                                  placeholder="Option 1, Option 2, Option 3"
-                                />
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between">
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={newField.required || false}
-                                  onChange={(e) => setNewField((prev) => ({ ...prev, required: e.target.checked }))}
-                                  className="rounded border-border"
-                                />
-                                <span className="text-sm">Required field</span>
-                              </label>
-                              <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => setShowAddField(false)}>
-                                  Cancel
-                                </Button>
-                                <Button size="sm" onClick={addFormField}>
-                                  Add Field
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="teams">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Team Management</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Manage teams and their assignments ({teams.length} teams)
-                  </p>
-                </div>
-                <Button onClick={() => setShowAddTeam(true)} className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Team
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {teams.map((team) => (
-                    <div
-                      key={team.id}
-                      className="flex items-center justify-between p-4 border border-border rounded-lg"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-medium">{team.name}</h3>
-                          <Badge variant="outline">{team.department}</Badge>
-                          <Badge variant={team.status === "Active" ? "default" : "secondary"}>{team.status}</Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Manager: {team.manager} • {team.members} members
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeTeam(team.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {showAddTeam && (
-                    <Card className="border-dashed">
-                      <CardContent className="pt-6">
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-3 gap-4">
-                            <div>
-                              <Label>Team Name</Label>
-                              <Input
-                                value={newTeam.name}
-                                onChange={(e) => setNewTeam((prev) => ({ ...prev, name: e.target.value }))}
-                                placeholder="Enter team name"
-                              />
-                            </div>
-                            <div>
-                              <Label>Department</Label>
-                              <Input
-                                value={newTeam.department}
-                                onChange={(e) => setNewTeam((prev) => ({ ...prev, department: e.target.value }))}
-                                placeholder="Enter department"
-                              />
-                            </div>
-                            <div>
-                              <Label>Manager</Label>
-                              <Input
-                                value={newTeam.manager}
-                                onChange={(e) => setNewTeam((prev) => ({ ...prev, manager: e.target.value }))}
-                                placeholder="Enter manager name"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setShowAddTeam(false)}>
-                              Cancel
-                            </Button>
-                            <Button size="sm" onClick={addTeam}>
-                              Add Team
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="users">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>User Management</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Manage user accounts and permissions ({users.length} users)
-                  </p>
-                </div>
-                <Button onClick={() => setShowAddUser(true)} className="flex items-center gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  Add User
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {users.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between p-4 border border-border rounded-lg"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-medium">{user.name}</h3>
-                          <Badge variant="outline">{user.role}</Badge>
-                          <Badge variant={user.status === "Active" ? "default" : "secondary"}>{user.status}</Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {user.email} • Team: {user.team}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => toggleUserStatus(user.id)}>
-                          {user.status === "Active" ? "Deactivate" : "Activate"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeUser(user.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {showAddUser && (
-                    <Card className="border-dashed">
-                      <CardContent className="pt-6">
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label>Full Name</Label>
-                              <Input
-                                value={newUser.name}
-                                onChange={(e) => setNewUser((prev) => ({ ...prev, name: e.target.value }))}
-                                placeholder="Enter full name"
-                              />
-                            </div>
-                            <div>
-                              <Label>Email</Label>
-                              <Input
-                                type="email"
-                                value={newUser.email}
-                                onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
-                                placeholder="Enter email address"
-                              />
-                            </div>
-                            <div>
-                              <Label>Role</Label>
-                              <Select
-                                value={newUser.role}
-                                onChange={(value) => setNewUser((prev) => ({ ...prev, role: value }))}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Member">Member</SelectItem>
-                                  <SelectItem value="Manager">Manager</SelectItem>
-                                  <SelectItem value="Admin">Admin</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label>Team</Label>
-                              <Select
-                                value={newUser.team}
-                                onChange={(value) => setNewUser((prev) => ({ ...prev, team: value }))}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select team" />
