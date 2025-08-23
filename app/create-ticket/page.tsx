@@ -297,10 +297,10 @@ export default function CreateTicket() {
       <header className="border-b border-border bg-card">
         <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard">
+            <Link href="/">
               <Button variant="ghost" size="sm" className="flex items-center gap-2">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Dashboard
+                Back to Home
               </Button>
             </Link>
             <div>
