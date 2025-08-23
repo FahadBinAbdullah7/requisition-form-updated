@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { NavigationHeader } from "@/components/navigation-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,6 +41,23 @@ interface KanbanColumn {
   tickets: Ticket[]
 }
 
+interface TeamMember {
+  id: string
+  name: string
+  team: string
+  initials: string
+}
+
+// Default teams and team members as fallback
+const defaultTeams = ["Digital Marketing", "DevOps", "Customer Success", "Product Management", "UX/UI Design"]
+const defaultTeamMembers = [
+  { id: "1", name: "Sarah Johnson", team: "Digital Marketing", initials: "SJ" },
+  { id: "2", name: "Mike Chen", team: "DevOps", initials: "MC" },
+  { id: "3", name: "Emily Davis", team: "Customer Success", initials: "ED" },
+  { id: "4", name: "Alex Rodriguez", team: "Product Management", initials: "AR" },
+  { id: "5", name: "Jessica Kim", team: "UX/UI Design", initials: "JK" },
+]
+
 export default function KanbanBoard() {
   const { user } = useAuth()
   const [selectedTeam, setSelectedTeam] = useState("all")
@@ -61,9 +77,9 @@ export default function KanbanBoard() {
     team: "",
     dueDate: "",
   })
-
+  const [teams, setTeams] = useState<string[]>(defaultTeams)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(defaultTeamMembers)
   const [availableTickets, setAvailableTickets] = useState<Ticket[]>([])
-
   const [columns, setColumns] = useState<KanbanColumn[]>([
     {
       id: "todo",
@@ -95,58 +111,77 @@ export default function KanbanBoard() {
     },
   ])
 
-  const teams = ["Digital Marketing", "DevOps", "Customer Success", "Product Management", "UX/UI Design"]
-  const teamMembers = [
-    { id: "1", name: "Sarah Johnson", team: "Digital Marketing", initials: "SJ" },
-    { id: "2", name: "Mike Chen", team: "DevOps", initials: "MC" },
-    { id: "3", name: "Emily Davis", team: "Customer Success", initials: "ED" },
-    { id: "4", name: "Alex Rodriguez", team: "Product Management", initials: "AR" },
-    { id: "5", name: "Jessica Kim", team: "UX/UI Design", initials: "JK" },
-  ]
+  // Load teams and teamMembers from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedTeams = localStorage.getItem("teams")
+      const savedTeamMembers = localStorage.getItem("teamMembers")
+      if (savedTeams) {
+        setTeams(JSON.parse(savedTeams))
+      }
+      if (savedTeamMembers) {
+        setTeamMembers(JSON.parse(savedTeamMembers))
+      }
+    }
+  }, [])
 
+  // Load tickets from localStorage or API
   useEffect(() => {
     const loadTickets = async () => {
       try {
+        // First, try to load from localStorage
+        let tickets: any[] = []
+        if (typeof window !== "undefined") {
+          const savedTickets = localStorage.getItem("tickets")
+          if (savedTickets) {
+            tickets = JSON.parse(savedTickets)
+          }
+        }
+
+        // Optionally, fetch from API if needed
         const response = await fetch("/api/tickets")
         if (response.ok) {
-          const tickets = await response.json()
-          const kanbanTickets = tickets.map((ticket: any) => ({
-            id: ticket.id,
-            title: ticket.productName,
-            description: ticket.details,
-            type: ticket.type,
-            priority: ticket.priority || "Medium",
-            assignee: {
-              name: ticket.assignee || "Unassigned",
-              avatar: "",
-              initials: ticket.assignee
-                ? ticket.assignee
-                    .split(" ")
-                    .map((n: string) => n[0])
-                    .join("")
-                : "UN",
-            },
-            team: ticket.team,
-            dueDate: ticket.deliveryTimeline,
-            createdDate: ticket.createdDate,
-            status:
-              ticket.status === "Open"
-                ? "todo"
-                : ticket.status === "In Progress"
-                  ? "in-progress"
-                  : ticket.status === "Review"
-                    ? "review"
-                    : "done",
-            tags: [ticket.type, ticket.priority],
-          }))
-
-          setColumns((prevColumns) =>
-            prevColumns.map((column) => ({
-              ...column,
-              tickets: kanbanTickets.filter((ticket: Ticket) => ticket.status === column.status),
-            })),
-          )
+          tickets = await response.json()
         }
+
+        const kanbanTickets = tickets.map((ticket: any) => ({
+          id: ticket.id,
+          title: ticket.productName || "Untitled",
+          description: ticket.details || "",
+          type: ticket.type || "Unknown",
+          priority: ticket.priority || "Medium",
+          assignee: {
+            name: ticket.assignee || ticket.submitterName || "Unassigned",
+            avatar: "",
+            initials: (ticket.assignee || ticket.submitterName || "Unassigned")
+              .split(" ")
+              .map((n: string) => n[0])
+              .join("")
+              .slice(0, 2),
+          },
+          team: ticket.team || "Unassigned",
+          dueDate: ticket.deliveryTimeline || ticket.createdDate || "",
+          createdDate: ticket.createdDate || new Date().toISOString().split("T")[0],
+          status:
+            ticket.status === "Open"
+              ? "todo"
+              : ticket.status === "In Progress"
+                ? "in-progress"
+                : ticket.status === "Review"
+                  ? "review"
+                  : ticket.status === "Draft"
+                    ? "todo"
+                    : "done",
+          tags: [ticket.type || "Unknown", ticket.priority || "Medium"],
+        }))
+
+        setAvailableTickets(kanbanTickets)
+        setColumns((prevColumns) =>
+          prevColumns.map((column) => ({
+            ...column,
+            tickets: kanbanTickets.filter((ticket: Ticket) => ticket.status === column.status),
+          })),
+        )
       } catch (error) {
         console.log("[v0] Failed to load tickets:", error)
       }
@@ -186,16 +221,33 @@ export default function KanbanBoard() {
     if (!draggedTicket) return
 
     const targetStatus = targetColumnId as Ticket["status"]
+    const updatedTicket = { ...draggedTicket, status: targetStatus }
 
+    // Update columns
     setColumns((prevColumns) =>
       prevColumns.map((column) => ({
         ...column,
         tickets:
           column.id === targetColumnId
-            ? [...column.tickets.filter((t) => t.id !== draggedTicket.id), { ...draggedTicket, status: targetStatus }]
+            ? [...column.tickets.filter((t) => t.id !== draggedTicket.id), updatedTicket]
             : column.tickets.filter((t) => t.id !== draggedTicket.id),
       })),
     )
+
+    // Update availableTickets
+    setAvailableTickets((prev) =>
+      prev.map((ticket) => (ticket.id === draggedTicket.id ? updatedTicket : ticket)),
+    )
+
+    // Update localStorage
+    if (typeof window !== "undefined") {
+      const savedTickets = localStorage.getItem("tickets")
+      const tickets = savedTickets ? JSON.parse(savedTickets) : []
+      const updatedTickets = tickets.map((t: any) =>
+        t.id === draggedTicket.id ? { ...t, status: targetStatus === "todo" ? "Open" : targetStatus } : t,
+      )
+      localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+    }
 
     setDraggedTicket(null)
   }
@@ -210,6 +262,14 @@ export default function KanbanBoard() {
       )
 
       setAvailableTickets((prev) => prev.filter((ticket) => ticket.id !== ticketId))
+
+      // Update localStorage
+      if (typeof window !== "undefined") {
+        const savedTickets = localStorage.getItem("tickets")
+        const tickets = savedTickets ? JSON.parse(savedTickets) : []
+        const updatedTickets = tickets.filter((t: any) => t.id !== ticketId)
+        localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+      }
     }
   }
 
@@ -244,6 +304,28 @@ export default function KanbanBoard() {
       prevColumns.map((column) => (column.id === "todo" ? { ...column, tickets: [...column.tickets, task] } : column)),
     )
 
+    setAvailableTickets((prev) => [...prev, task])
+
+    // Save to localStorage
+    if (typeof window !== "undefined") {
+      const savedTickets = localStorage.getItem("tickets")
+      const tickets = savedTickets ? JSON.parse(savedTickets) : []
+      tickets.push({
+        id: task.id,
+        productName: task.title,
+        details: task.description,
+        type: task.type,
+        priority: task.priority,
+        assignee: task.assignee.name,
+        submitterName: task.assignee.name,
+        team: task.team,
+        deliveryTimeline: task.dueDate,
+        createdDate: task.createdDate,
+        status: "Open",
+      })
+      localStorage.setItem("tickets", JSON.stringify(tickets))
+    }
+
     setNewTask({
       title: "",
       description: "",
@@ -262,13 +344,31 @@ export default function KanbanBoard() {
       return
     }
 
-    const projectTickets = availableTickets.filter((ticket) => selectedTickets.includes(ticket.id))
+    const projectTickets = availableTickets
+      .filter((ticket) => selectedTickets.includes(ticket.id))
+      .map((ticket) => ({ ...ticket, status: "todo" }))
 
     setColumns((prevColumns) =>
       prevColumns.map((column) =>
-        column.id === "todo" ? { ...column, tickets: [...column.tickets, ...projectTickets] } : column,
+        column.id === "todo"
+          ? { ...column, tickets: [...column.tickets, ...projectTickets] }
+          : { ...column, tickets: column.tickets.filter((ticket) => !selectedTickets.includes(ticket.id)) },
       ),
     )
+
+    setAvailableTickets((prev) =>
+      prev.map((ticket) => (selectedTickets.includes(ticket.id) ? { ...ticket, status: "todo" } : ticket)),
+    )
+
+    // Update localStorage
+    if (typeof window !== "undefined") {
+      const savedTickets = localStorage.getItem("tickets")
+      const tickets = savedTickets ? JSON.parse(savedTickets) : []
+      const updatedTickets = tickets.map((t: any) =>
+        selectedTickets.includes(t.id) ? { ...t, status: "Open" } : t,
+      )
+      localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+    }
 
     setProjectName("")
     setSelectedTickets([])
