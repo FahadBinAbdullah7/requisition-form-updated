@@ -33,6 +33,7 @@ interface Ticket {
   status: "todo" | "in-progress" | "review" | "done"
   tags: string[]
   selected?: boolean
+  assigneeId?: string
 }
 
 interface KanbanColumn {
@@ -62,6 +63,7 @@ interface Project {
   createdDate: string
   priority?: "Low" | "Medium" | "High" | "Urgent"
   dueDate?: string
+  hasKanban?: boolean
 }
 
 export default function KanbanBoard() {
@@ -159,23 +161,34 @@ export default function KanbanBoard() {
         }
       }
 
+      const savedProjects = localStorage.getItem("projects")
+      let projects: Project[] = savedProjects ? JSON.parse(savedProjects) : []
+
       if (projectId) {
-        const savedProjects = localStorage.getItem("projects")
-        if (savedProjects) {
-          try {
-            const parsedProjects = JSON.parse(savedProjects)
-            const foundProject = parsedProjects.find((p: Project) => p.id === projectId)
-            if (foundProject) {
-              setProject(foundProject)
-            } else {
-              console.error(`Project with ID ${projectId} not found`)
-              setProject(null)
-            }
-          } catch (error) {
-            console.error("Failed to parse projects from localStorage:", error)
-            setProject(null)
-          }
+        const foundProject = projects.find((p: Project) => p.id === projectId)
+        if (foundProject) {
+          setProject(foundProject)
+        } else {
+          console.error(`Project with ID ${projectId} not found`)
+          setProject(null)
         }
+      } else {
+        let universalProject = projects.find((p: Project) => p.id === "universal")
+        if (!universalProject) {
+          universalProject = {
+            id: "universal",
+            name: "Universal Kanban",
+            description: "Tasks not assigned to a specific project",
+            tickets: [],
+            assignedMembers: [],
+            status: "Active",
+            createdDate: new Date().toISOString().split("T")[0],
+            hasKanban: true,
+          }
+          projects.push(universalProject)
+          localStorage.setItem("projects", JSON.stringify(projects))
+        }
+        setProject(universalProject)
       }
     }
   }, [projectId])
@@ -217,11 +230,21 @@ export default function KanbanBoard() {
           assignee: {
             name: ticket.assignee || ticket.submitterName || "Unassigned",
             avatar: "",
-            initials: (ticket.assignee || ticket.submitterName || "Unassigned")
-              .split(" ")
-              .map((n: string) => n[0])
-              .join("")
-              .slice(0, 2),
+            initials: (() => {
+              const name = ticket.assignee || ticket.submitterName || "Unassigned"
+              const member = teamMembers.find((m) => m.id === ticket.assigneeId || m.name === name)
+              return member
+                ? member.name
+                    .split(" ")
+                    .map((n: string) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                : name
+                    .split(" ")
+                    .map((n: string) => n[0])
+                    .join("")
+                    .slice(0, 2)
+            })(),
           },
           team: ticket.team || "Unassigned",
           dueDate: ticket.deliveryTimeline || ticket.createdDate || "",
@@ -238,6 +261,7 @@ export default function KanbanBoard() {
                     : "todo",
           tags: [ticket.type || "Promotional", ticket.priority || "Medium"],
           selected: ticket.selected || false,
+          assigneeId: ticket.assigneeId || "",
         }))
 
         let filteredTickets: Ticket[] = []
@@ -275,7 +299,7 @@ export default function KanbanBoard() {
     }
 
     loadTickets()
-  }, [projectId, project])
+  }, [projectId, project, teamMembers])
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -349,6 +373,7 @@ export default function KanbanBoard() {
                         ? "Review"
                         : "Completed",
                 selected: true,
+                assigneeId: t.assigneeId || "",
               }
             : t
         )
@@ -362,6 +387,7 @@ export default function KanbanBoard() {
             type: draggedTicket.type,
             priority: draggedTicket.priority,
             assignee: draggedTicket.assignee.name,
+            assigneeId: draggedTicket.assigneeId || "",
             submitterName: draggedTicket.assignee.name,
             team: draggedTicket.team,
             deliveryTimeline: draggedTicket.dueDate,
@@ -458,6 +484,7 @@ export default function KanbanBoard() {
       status: "todo",
       tags: [newTask.type, newTask.priority],
       selected: true,
+      assigneeId: newTask.assignee,
     }
 
     setColumns((prevColumns) =>
@@ -477,6 +504,7 @@ export default function KanbanBoard() {
           type: task.type,
           priority: task.priority,
           assignee: task.assignee.name,
+          assigneeId: task.assigneeId,
           submitterName: task.assignee.name,
           team: task.team,
           deliveryTimeline: task.dueDate,
@@ -487,16 +515,17 @@ export default function KanbanBoard() {
         tickets.push(newTicket)
         localStorage.setItem("tickets", JSON.stringify(tickets))
 
-        if (projectId && project) {
-          const savedProjects = localStorage.getItem("projects")
-          const projects = savedProjects ? JSON.parse(savedProjects) : []
-          const updatedProjects = projects.map((p: Project) =>
-            p.id === projectId ? { ...p, tickets: [...p.tickets, task.id] } : p
-          )
-          localStorage.setItem("projects", JSON.stringify(updatedProjects))
-          setProject((prev) => (prev ? { ...prev, tickets: [...prev.tickets, task.id] } : prev))
-          console.log(`Added ticket ${task.id} to project ${projectId} in localStorage`)
-        }
+        const savedProjects = localStorage.getItem("projects")
+        const projects = savedProjects ? JSON.parse(savedProjects) : []
+        const targetProjectId = projectId || "universal"
+        const updatedProjects = projects.map((p: Project) =>
+          p.id === targetProjectId ? { ...p, tickets: [...p.tickets, task.id] } : p
+        )
+        localStorage.setItem("projects", JSON.stringify(updatedProjects))
+        setProject((prev) =>
+          prev && prev.id === targetProjectId ? { ...prev, tickets: [...prev.tickets, task.id] } : prev
+        )
+        console.log(`Added ticket ${task.id} to project ${targetProjectId} in localStorage`)
       } catch (error) {
         console.error("Failed to update localStorage for new task:", error)
       }
@@ -541,7 +570,14 @@ export default function KanbanBoard() {
         const savedTickets = localStorage.getItem("tickets")
         const tickets = savedTickets ? JSON.parse(savedTickets) : []
         const updatedTickets = tickets.map((t: any) =>
-          selectedTickets.includes(t.id) ? { ...t, status: "Open", selected: true } : t
+          selectedTickets.includes(t.id)
+            ? {
+                ...t,
+                status: "Open",
+                selected: true,
+                assigneeId: t.assigneeId || teamMembers.find((m) => m.name === t.assignee)?.id || "",
+              }
+            : t
         )
         localStorage.setItem("tickets", JSON.stringify(updatedTickets))
 
@@ -555,6 +591,7 @@ export default function KanbanBoard() {
           assignedMembers: [],
           status: "Planning",
           createdDate: new Date().toISOString().split("T")[0],
+          hasKanban: true,
         }
         projects.push(newProject)
         localStorage.setItem("projects", JSON.stringify(projects))
@@ -573,7 +610,7 @@ export default function KanbanBoard() {
   const filteredColumns = columns.map((column) => ({
     ...column,
     tickets: column.tickets.filter((ticket) => {
-      const matchesTeam = selectedTeam === "all" || ticket.team === selectedTeam
+      const matchesTeam = selectedTeam === "all" || ticket.team.split(" & ").includes(selectedTeam)
       const matchesPriority = selectedPriority === "all" || ticket.priority === selectedPriority
       const matchesSearch =
         searchQuery === "" ||
