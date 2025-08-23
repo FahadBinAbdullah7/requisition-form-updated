@@ -221,48 +221,53 @@ export default function KanbanBoard() {
           console.warn("API /api/tickets returned non-200 status:", response.status)
         }
 
-        const kanbanTickets = tickets.map((ticket: any) => ({
-          id: ticket.id || `TKT-${Date.now()}`,
-          title: ticket.productName || "Untitled",
-          description: ticket.details || "",
-          type: ticket.type || "Promotional",
-          priority: ticket.priority || "Medium",
-          assignee: {
-            name: ticket.assignee || ticket.submitterName || "Unassigned",
-            avatar: "",
-            initials: (() => {
-              const name = ticket.assignee || ticket.submitterName || "Unassigned"
-              const member = teamMembers.find((m) => m.id === ticket.assigneeId || m.name === name)
-              return member
-                ? member.name
-                    .split(" ")
-                    .map((n: string) => n[0])
-                    .join("")
-                    .slice(0, 2)
-                : name
-                    .split(" ")
-                    .map((n: string) => n[0])
-                    .join("")
-                    .slice(0, 2)
-            })(),
-          },
-          team: ticket.team || "Unassigned",
-          dueDate: ticket.deliveryTimeline || ticket.createdDate || "",
-          createdDate: ticket.createdDate || new Date().toISOString().split("T")[0],
-          status:
-            ticket.status === "Open"
-              ? "todo"
-              : ticket.status === "In Progress"
-                ? "in-progress"
-                : ticket.status === "Review"
-                  ? "review"
-                  : ticket.status === "Completed"
-                    ? "done"
-                    : "todo",
-          tags: [ticket.type || "Promotional", ticket.priority || "Medium"],
-          selected: ticket.selected || false,
-          assigneeId: ticket.assigneeId || "",
-        }))
+        console.log("Raw tickets from localStorage/API:", tickets) // Debug raw data
+
+        const kanbanTickets = tickets.map((ticket: any) => {
+          console.log("Raw ticket data:", ticket)
+          const title = ticket.productName || ticket.title || ticket.name || "Untitled"
+          const assigneeName =
+            ticket.assignee ||
+            ticket.assigneeName ||
+            ticket.submitterName ||
+            ticket.assignedTo ||
+            "Unassigned"
+          const assigneeId = ticket.assigneeId || ticket.submitterId || ""
+          const member = teamMembers.find((m) => m.id === assigneeId || m.name === assigneeName)
+
+          return {
+            id: ticket.id || `TKT-${Date.now()}`,
+            title,
+            description: ticket.details || ticket.description || "",
+            type: ticket.type || "Promotional",
+            priority: ticket.priority || "Medium",
+            assignee: {
+              name: member ? member.name : assigneeName,
+              avatar: member ? member.avatar || "" : "",
+              initials: (member ? member.name : assigneeName)
+                .split(" ")
+                .map((n: string) => n[0])
+                .join("")
+                .slice(0, 2),
+            },
+            team: ticket.team || "Unassigned",
+            dueDate: ticket.deliveryTimeline || ticket.dueDate || ticket.createdDate || "",
+            createdDate: ticket.createdDate || new Date().toISOString().split("T")[0],
+            status:
+              ticket.status === "Open"
+                ? "todo"
+                : ticket.status === "In Progress"
+                  ? "in-progress"
+                  : ticket.status === "Review"
+                    ? "review"
+                    : ticket.status === "Completed"
+                      ? "done"
+                      : "todo",
+            tags: [ticket.type || "Promotional", ticket.priority || "Medium"],
+            selected: ticket.selected || false,
+            assigneeId: assigneeId || "",
+          }
+        })
 
         let filteredTickets: Ticket[] = []
         if (projectId && project) {
@@ -372,8 +377,10 @@ export default function KanbanBoard() {
                       : targetStatus === "review"
                         ? "Review"
                         : "Completed",
+                title: t.title || t.productName || draggedTicket.title,
+                assignee: t.assignee || t.assigneeName || t.submitterName || draggedTicket.assignee.name,
+                assigneeId: t.assigneeId || draggedTicket.assigneeId || "",
                 selected: true,
-                assigneeId: t.assigneeId || "",
               }
             : t
         )
@@ -382,15 +389,14 @@ export default function KanbanBoard() {
           console.warn(`Ticket ${draggedTicket.id} not found in localStorage, adding it`)
           updatedTickets.push({
             id: draggedTicket.id,
-            productName: draggedTicket.title,
-            details: draggedTicket.description,
+            title: draggedTicket.title,
+            description: draggedTicket.description,
             type: draggedTicket.type,
             priority: draggedTicket.priority,
             assignee: draggedTicket.assignee.name,
             assigneeId: draggedTicket.assigneeId || "",
-            submitterName: draggedTicket.assignee.name,
             team: draggedTicket.team,
-            deliveryTimeline: draggedTicket.dueDate,
+            dueDate: draggedTicket.dueDate,
             createdDate: draggedTicket.createdDate,
             status:
               targetStatus === "todo"
@@ -405,6 +411,23 @@ export default function KanbanBoard() {
         }
 
         localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+
+        const savedProjects = localStorage.getItem("projects")
+        if (savedProjects && project) {
+          const projects = JSON.parse(savedProjects)
+          const updatedProjects = projects.map((p: Project) =>
+            p.id === (projectId || "universal")
+              ? { ...p, tickets: p.tickets.includes(draggedTicket.id) ? p.tickets : [...p.tickets, draggedTicket.id] }
+              : p
+          )
+          localStorage.setItem("projects", JSON.stringify(updatedProjects))
+          setProject((prev) =>
+            prev && prev.id === (projectId || "universal")
+              ? { ...prev, tickets: prev.tickets.includes(draggedTicket.id) ? prev.tickets : [...prev.tickets, draggedTicket.id] }
+              : prev
+          )
+        }
+
         console.log(`Updated ticket ${draggedTicket.id} to status ${targetStatus} in localStorage`)
       } catch (error) {
         console.error("Failed to update localStorage:", error)
@@ -499,15 +522,14 @@ export default function KanbanBoard() {
         const tickets = savedTickets ? JSON.parse(savedTickets) : []
         const newTicket = {
           id: task.id,
-          productName: task.title,
-          details: task.description,
+          title: task.title,
+          description: task.description,
           type: task.type,
           priority: task.priority,
           assignee: task.assignee.name,
           assigneeId: task.assigneeId,
-          submitterName: task.assignee.name,
           team: task.team,
-          deliveryTimeline: task.dueDate,
+          dueDate: task.dueDate,
           createdDate: task.createdDate,
           status: "Open",
           selected: true,
@@ -575,7 +597,9 @@ export default function KanbanBoard() {
                 ...t,
                 status: "Open",
                 selected: true,
-                assigneeId: t.assigneeId || teamMembers.find((m) => m.name === t.assignee)?.id || "",
+                title: t.title || t.productName || "Untitled",
+                assignee: t.assignee || t.assigneeName || t.submitterName || "Unassigned",
+                assigneeId: t.assigneeId || teamMembers.find((m) => m.name === (t.assignee || t.assigneeName || t.submitterName))?.id || "",
               }
             : t
         )
