@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { NavigationHeader } from "@/components/navigation-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -44,22 +45,28 @@ interface KanbanColumn {
 interface TeamMember {
   id: string
   name: string
+  email: string
+  role: "Admin" | "Manager" | "Member"
   team: string
-  initials: string
+  status: "Active" | "Inactive"
 }
 
-// Default teams and team members as fallback
-const defaultTeams = ["Digital Marketing", "DevOps", "Customer Success", "Product Management", "UX/UI Design"]
-const defaultTeamMembers = [
-  { id: "1", name: "Sarah Johnson", team: "Digital Marketing", initials: "SJ" },
-  { id: "2", name: "Mike Chen", team: "DevOps", initials: "MC" },
-  { id: "3", name: "Emily Davis", team: "Customer Success", initials: "ED" },
-  { id: "4", name: "Alex Rodriguez", team: "Product Management", initials: "AR" },
-  { id: "5", name: "Jessica Kim", team: "UX/UI Design", initials: "JK" },
-]
+interface Project {
+  id: string
+  name: string
+  description: string
+  tickets: string[]
+  assignedMembers: string[]
+  status: "Planning" | "Active" | "Completed"
+  createdDate: string
+  priority?: "Low" | "Medium" | "High" | "Urgent"
+  dueDate?: string
+}
 
 export default function KanbanBoard() {
   const { user } = useAuth()
+  const searchParams = useSearchParams()
+  const projectId = searchParams.get("projectId")
   const [selectedTeam, setSelectedTeam] = useState("all")
   const [selectedPriority, setSelectedPriority] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -71,15 +78,16 @@ export default function KanbanBoard() {
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
-    type: "Technical",
+    type: "Promotional",
     priority: "Medium" as Ticket["priority"],
     assignee: "",
     team: "",
     dueDate: "",
   })
-  const [teams, setTeams] = useState<string[]>(defaultTeams)
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(defaultTeamMembers)
+  const [teams, setTeams] = useState<string[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [availableTickets, setAvailableTickets] = useState<Ticket[]>([])
+  const [project, setProject] = useState<Project | null>(null)
   const [columns, setColumns] = useState<KanbanColumn[]>([
     {
       id: "todo",
@@ -111,25 +119,54 @@ export default function KanbanBoard() {
     },
   ])
 
-  // Load teams and teamMembers from localStorage
+  // Load teams, teamMembers, and project from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
+      // Load teams
       const savedTeams = localStorage.getItem("teams")
-      const savedTeamMembers = localStorage.getItem("teamMembers")
       if (savedTeams) {
-        setTeams(JSON.parse(savedTeams))
+        const parsedTeams = JSON.parse(savedTeams)
+        setTeams(
+          Array.isArray(parsedTeams)
+            ? parsedTeams.map((team: any) => team.name || "Unknown")
+            : [],
+        )
       }
-      if (savedTeamMembers) {
-        setTeamMembers(JSON.parse(savedTeamMembers))
+
+      // Load teamMembers (users)
+      const savedUsers = localStorage.getItem("users")
+      if (savedUsers) {
+        const parsedUsers = JSON.parse(savedUsers)
+        setTeamMembers(
+          Array.isArray(parsedUsers)
+            ? parsedUsers.map((user: any) => ({
+                id: user.id || `user_${Date.now()}`,
+                name: user.name || "Unknown",
+                email: user.email || "",
+                role: user.role || "Member",
+                team: user.team || "Unassigned",
+                status: user.status || "Active",
+              }))
+            : [],
+        )
+      }
+
+      // Load project if projectId is provided
+      if (projectId) {
+        const savedProjects = localStorage.getItem("projects")
+        if (savedProjects) {
+          const parsedProjects = JSON.parse(savedProjects)
+          const foundProject = parsedProjects.find((p: Project) => p.id === projectId)
+          setProject(foundProject || null)
+        }
       }
     }
-  }, [])
+  }, [projectId])
 
   // Load tickets from localStorage or API
   useEffect(() => {
     const loadTickets = async () => {
       try {
-        // First, try to load from localStorage
         let tickets: any[] = []
         if (typeof window !== "undefined") {
           const savedTickets = localStorage.getItem("tickets")
@@ -138,17 +175,16 @@ export default function KanbanBoard() {
           }
         }
 
-        // Optionally, fetch from API if needed
         const response = await fetch("/api/tickets")
         if (response.ok) {
           tickets = await response.json()
         }
 
         const kanbanTickets = tickets.map((ticket: any) => ({
-          id: ticket.id,
+          id: ticket.id || `TKT-${Date.now()}`,
           title: ticket.productName || "Untitled",
           description: ticket.details || "",
-          type: ticket.type || "Unknown",
+          type: ticket.type || "Promotional",
           priority: ticket.priority || "Medium",
           assignee: {
             name: ticket.assignee || ticket.submitterName || "Unassigned",
@@ -169,17 +205,22 @@ export default function KanbanBoard() {
                 ? "in-progress"
                 : ticket.status === "Review"
                   ? "review"
-                  : ticket.status === "Draft"
-                    ? "todo"
-                    : "done",
-          tags: [ticket.type || "Unknown", ticket.priority || "Medium"],
+                  : ticket.status === "Completed"
+                    ? "done"
+                    : "todo",
+          tags: [ticket.type || "Promotional", ticket.priority || "Medium"],
         }))
 
-        setAvailableTickets(kanbanTickets)
+        // Filter tickets by project if projectId is provided
+        const filteredTickets = projectId && project
+          ? kanbanTickets.filter((ticket: Ticket) => project.tickets.includes(ticket.id))
+          : kanbanTickets
+
+        setAvailableTickets(filteredTickets)
         setColumns((prevColumns) =>
           prevColumns.map((column) => ({
             ...column,
-            tickets: kanbanTickets.filter((ticket: Ticket) => ticket.status === column.status),
+            tickets: filteredTickets.filter((ticket: Ticket) => ticket.status === column.status),
           })),
         )
       } catch (error) {
@@ -188,7 +229,7 @@ export default function KanbanBoard() {
     }
 
     loadTickets()
-  }, [])
+  }, [projectId, project])
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -244,7 +285,19 @@ export default function KanbanBoard() {
       const savedTickets = localStorage.getItem("tickets")
       const tickets = savedTickets ? JSON.parse(savedTickets) : []
       const updatedTickets = tickets.map((t: any) =>
-        t.id === draggedTicket.id ? { ...t, status: targetStatus === "todo" ? "Open" : targetStatus } : t,
+        t.id === draggedTicket.id
+          ? {
+              ...t,
+              status:
+                targetStatus === "todo"
+                  ? "Open"
+                  : targetStatus === "in-progress"
+                    ? "In Progress"
+                    : targetStatus === "review"
+                      ? "Review"
+                      : "Completed",
+            }
+          : t,
       )
       localStorage.setItem("tickets", JSON.stringify(updatedTickets))
     }
@@ -263,18 +316,29 @@ export default function KanbanBoard() {
 
       setAvailableTickets((prev) => prev.filter((ticket) => ticket.id !== ticketId))
 
-      // Update localStorage
+      // Update localStorage tickets
       if (typeof window !== "undefined") {
         const savedTickets = localStorage.getItem("tickets")
         const tickets = savedTickets ? JSON.parse(savedTickets) : []
         const updatedTickets = tickets.filter((t: any) => t.id !== ticketId)
         localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+
+        // Update projects to remove the ticket
+        const savedProjects = localStorage.getItem("projects")
+        if (savedProjects) {
+          const projects = JSON.parse(savedProjects)
+          const updatedProjects = projects.map((p: Project) => ({
+            ...p,
+            tickets: p.tickets.filter((id: string) => id !== ticketId),
+          }))
+          localStorage.setItem("projects", JSON.stringify(updatedProjects))
+        }
       }
     }
   }
 
   const handleAddTask = () => {
-    if (!newTask.title.trim() || !newTask.assignee) {
+    if (!newTask.title.trim() || !newTask.assignee || !newTask.team) {
       alert("Please fill in all required fields")
       return
     }
@@ -291,9 +355,13 @@ export default function KanbanBoard() {
       assignee: {
         name: assignedMember.name,
         avatar: "",
-        initials: assignedMember.initials,
+        initials: assignedMember.name
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .slice(0, 2),
       },
-      team: assignedMember.team,
+      team: newTask.team,
       dueDate: newTask.dueDate,
       createdDate: new Date().toISOString().split("T")[0],
       status: "todo",
@@ -310,7 +378,7 @@ export default function KanbanBoard() {
     if (typeof window !== "undefined") {
       const savedTickets = localStorage.getItem("tickets")
       const tickets = savedTickets ? JSON.parse(savedTickets) : []
-      tickets.push({
+      const newTicket = {
         id: task.id,
         productName: task.title,
         details: task.description,
@@ -322,14 +390,26 @@ export default function KanbanBoard() {
         deliveryTimeline: task.dueDate,
         createdDate: task.createdDate,
         status: "Open",
-      })
+      }
+      tickets.push(newTicket)
       localStorage.setItem("tickets", JSON.stringify(tickets))
+
+      // If in project mode, add ticket to project
+      if (projectId && project) {
+        const savedProjects = localStorage.getItem("projects")
+        const projects = savedProjects ? JSON.parse(savedProjects) : []
+        const updatedProjects = projects.map((p: Project) =>
+          p.id === projectId ? { ...p, tickets: [...p.tickets, task.id] } : p,
+        )
+        localStorage.setItem("projects", JSON.stringify(updatedProjects))
+        setProject((prev) => (prev ? { ...prev, tickets: [...prev.tickets, task.id] } : prev))
+      }
     }
 
     setNewTask({
       title: "",
       description: "",
-      type: "Technical",
+      type: "Promotional",
       priority: "Medium",
       assignee: "",
       team: "",
@@ -360,7 +440,7 @@ export default function KanbanBoard() {
       prev.map((ticket) => (selectedTickets.includes(ticket.id) ? { ...ticket, status: "todo" } : ticket)),
     )
 
-    // Update localStorage
+    // Create new project and save to localStorage
     if (typeof window !== "undefined") {
       const savedTickets = localStorage.getItem("tickets")
       const tickets = savedTickets ? JSON.parse(savedTickets) : []
@@ -368,6 +448,20 @@ export default function KanbanBoard() {
         selectedTickets.includes(t.id) ? { ...t, status: "Open" } : t,
       )
       localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+
+      const savedProjects = localStorage.getItem("projects")
+      const projects = savedProjects ? JSON.parse(savedProjects) : []
+      const newProject: Project = {
+        id: `project_${Date.now()}`,
+        name: projectName,
+        description: "",
+        tickets: selectedTickets,
+        assignedMembers: [],
+        status: "Planning",
+        createdDate: new Date().toISOString().split("T")[0],
+      }
+      projects.push(newProject)
+      localStorage.setItem("projects", JSON.stringify(projects))
     }
 
     setProjectName("")
@@ -395,7 +489,11 @@ export default function KanbanBoard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavigationHeader title="Kanban Board" subtitle="Manage and track team tasks visually" backUrl="/dashboard" />
+      <NavigationHeader
+        title={project ? `Kanban Board: ${project.name}` : "Kanban Board"}
+        subtitle="Manage and track team tasks visually"
+        backUrl="/dashboard"
+      />
 
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -481,11 +579,9 @@ export default function KanbanBoard() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Technical">Technical</SelectItem>
-                              <SelectItem value="Marketing">Marketing</SelectItem>
-                              <SelectItem value="Design">Design</SelectItem>
-                              <SelectItem value="Operations">Operations</SelectItem>
-                              <SelectItem value="Research">Research</SelectItem>
+                              <SelectItem value="Promotional">Promotional</SelectItem>
+                              <SelectItem value="Paid">Paid</SelectItem>
+                              <SelectItem value="Recorded">Recorded</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -520,22 +616,42 @@ export default function KanbanBoard() {
                               <SelectValue placeholder="Select team member" />
                             </SelectTrigger>
                             <SelectContent>
-                              {teamMembers.map((member) => (
-                                <SelectItem key={member.id} value={member.id}>
-                                  {member.name} ({member.team})
+                              {teamMembers
+                                .filter((member) => member.status === "Active")
+                                .map((member) => (
+                                  <SelectItem key={member.id} value={member.id}>
+                                    {member.name} ({member.team})
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Team</label>
+                          <Select
+                            value={newTask.team}
+                            onValueChange={(value) => setNewTask((prev) => ({ ...prev, team: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select team" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teams.map((team) => (
+                                <SelectItem key={team} value={team}>
+                                  {team}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
-                        <div>
-                          <label className="text-sm font-medium">Due Date</label>
-                          <Input
-                            type="date"
-                            value={newTask.dueDate}
-                            onChange={(e) => setNewTask((prev) => ({ ...prev, dueDate: e.target.value }))}
-                          />
-                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Due Date</label>
+                        <Input
+                          type="date"
+                          value={newTask.dueDate}
+                          onChange={(e) => setNewTask((prev) => ({ ...prev, dueDate: e.target.value }))}
+                        />
                       </div>
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setShowAddTask(false)}>
@@ -546,73 +662,75 @@ export default function KanbanBoard() {
                     </div>
                   </DialogContent>
                 </Dialog>
-                <Dialog open={showTicketSelector} onOpenChange={setShowTicketSelector}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="flex items-center gap-2 bg-transparent">
-                      <FolderPlus className="h-4 w-4" />
-                      Create Project
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>Create Project from Tickets</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-sm font-medium">Project Name</label>
-                        <Input
-                          value={projectName}
-                          onChange={(e) => setProjectName(e.target.value)}
-                          placeholder="Enter project name"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium">Select Tickets</label>
-                        <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                          {availableTickets.length === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-4">
-                              No available tickets to create projects from
-                            </p>
-                          ) : (
-                            availableTickets.map((ticket) => (
-                              <div key={ticket.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                                <Checkbox
-                                  checked={selectedTickets.includes(ticket.id)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedTickets((prev) => [...prev, ticket.id])
-                                    } else {
-                                      setSelectedTickets((prev) => prev.filter((id) => id !== ticket.id))
-                                    }
-                                  }}
-                                />
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-mono text-xs text-muted-foreground">{ticket.id}</span>
-                                    <Badge variant="outline" className={getPriorityColor(ticket.priority)}>
-                                      {ticket.priority}
-                                    </Badge>
+                {!projectId && (
+                  <Dialog open={showTicketSelector} onOpenChange={setShowTicketSelector}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="flex items-center gap-2 bg-transparent">
+                        <FolderPlus className="h-4 w-4" />
+                        Create Project
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Create Project from Tickets</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium">Project Name</label>
+                          <Input
+                            value={projectName}
+                            onChange={(e) => setProjectName(e.target.value)}
+                            placeholder="Enter project name"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Select Tickets</label>
+                          <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+                            {availableTickets.length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                No available tickets to create projects from
+                              </p>
+                            ) : (
+                              availableTickets.map((ticket) => (
+                                <div key={ticket.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                                  <Checkbox
+                                    checked={selectedTickets.includes(ticket.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedTickets((prev) => [...prev, ticket.id])
+                                      } else {
+                                        setSelectedTickets((prev) => prev.filter((id) => id !== ticket.id))
+                                      }
+                                    }}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-mono text-xs text-muted-foreground">{ticket.id}</span>
+                                      <Badge variant="outline" className={getPriorityColor(ticket.priority)}>
+                                        {ticket.priority}
+                                      </Badge>
+                                    </div>
+                                    <h4 className="font-medium text-sm">{ticket.title}</h4>
+                                    <p className="text-xs text-muted-foreground mt-1">{ticket.description}</p>
                                   </div>
-                                  <h4 className="font-medium text-sm">{ticket.title}</h4>
-                                  <p className="text-xs text-muted-foreground mt-1">{ticket.description}</p>
                                 </div>
-                              </div>
-                            ))
-                          )}
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setShowTicketSelector(false)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={handleCreateProject} disabled={selectedTickets.length === 0}>
+                            Create Project ({selectedTickets.length} tickets)
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setShowTicketSelector(false)}>
-                          Cancel
-                        </Button>
-                        <Button onClick={handleCreateProject} disabled={selectedTickets.length === 0}>
-                          Create Project ({selectedTickets.length} tickets)
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                    </DialogContent>
+                  </Dialog>
+                )}
               </>
             )}
             <Link href="/create-ticket">
