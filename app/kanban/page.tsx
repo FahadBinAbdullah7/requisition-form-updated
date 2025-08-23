@@ -221,7 +221,7 @@ export default function KanbanBoard() {
           console.warn("API /api/tickets returned non-200 status:", response.status)
         }
 
-        console.log("Raw tickets from localStorage/API:", tickets) // Debug raw data
+        console.log("Raw tickets from localStorage/API:", tickets)
 
         const kanbanTickets = tickets.map((ticket: any) => {
           console.log("Raw ticket data:", ticket)
@@ -271,6 +271,10 @@ export default function KanbanBoard() {
 
         let filteredTickets: Ticket[] = []
         if (projectId && project) {
+          filteredTickets = kanbanTickets.filter((ticket: Ticket) =>
+            project.tickets.includes(ticket.id)
+          )
+        } else if (project && project.id === "universal") {
           filteredTickets = kanbanTickets.filter((ticket: Ticket) =>
             project.tickets.includes(ticket.id)
           )
@@ -413,22 +417,37 @@ export default function KanbanBoard() {
         localStorage.setItem("tickets", JSON.stringify(updatedTickets))
 
         const savedProjects = localStorage.getItem("projects")
-        if (savedProjects && project) {
-          const projects = JSON.parse(savedProjects)
-          const updatedProjects = projects.map((p: Project) =>
-            p.id === (projectId || "universal")
-              ? { ...p, tickets: p.tickets.includes(draggedTicket.id) ? p.tickets : [...p.tickets, draggedTicket.id] }
-              : p
-          )
-          localStorage.setItem("projects", JSON.stringify(updatedProjects))
-          setProject((prev) =>
-            prev && prev.id === (projectId || "universal")
-              ? { ...prev, tickets: prev.tickets.includes(draggedTicket.id) ? prev.tickets : [...prev.tickets, draggedTicket.id] }
-              : prev
-          )
+        let projects = savedProjects ? JSON.parse(savedProjects) : []
+        const targetProjectId = projectId || "universal"
+        let targetProject = projects.find((p: Project) => p.id === targetProjectId)
+
+        if (!targetProject) {
+          targetProject = {
+            id: "universal",
+            name: "Universal Kanban",
+            description: "Tasks not assigned to a specific project",
+            tickets: [],
+            assignedMembers: [],
+            status: "Active",
+            createdDate: new Date().toISOString().split("T")[0],
+            hasKanban: true,
+          }
+          projects.push(targetProject)
         }
 
-        console.log(`Updated ticket ${draggedTicket.id} to status ${targetStatus} in localStorage`)
+        const updatedProjects = projects.map((p: Project) =>
+          p.id === targetProjectId
+            ? { ...p, tickets: [...p.tickets.filter((id: string) => id !== draggedTicket.id), draggedTicket.id] }
+            : p
+        )
+        localStorage.setItem("projects", JSON.stringify(updatedProjects))
+        setProject((prev) =>
+          prev && prev.id === targetProjectId
+            ? { ...prev, tickets: [...prev.tickets.filter((id: string) => id !== draggedTicket.id), draggedTicket.id] }
+            : targetProject
+        )
+
+        console.log(`Updated ticket ${draggedTicket.id} to status ${targetStatus} in project ${targetProjectId}`)
       } catch (error) {
         console.error("Failed to update localStorage:", error)
       }
@@ -519,7 +538,11 @@ export default function KanbanBoard() {
     if (typeof window !== "undefined") {
       try {
         const savedTickets = localStorage.getItem("tickets")
-        const tickets = savedTickets ? JSON.parse(savedTickets) : []
+        let tickets = savedTickets ? JSON.parse(savedTickets) : []
+        if (!Array.isArray(tickets)) {
+          console.error("Invalid tickets data in localStorage, resetting to empty array")
+          tickets = []
+        }
         const newTicket = {
           id: task.id,
           title: task.title,
@@ -534,18 +557,38 @@ export default function KanbanBoard() {
           status: "Open",
           selected: true,
         }
-        tickets.push(newTicket)
+        tickets = [...tickets.filter((t: any) => t.id !== task.id), newTicket]
         localStorage.setItem("tickets", JSON.stringify(tickets))
 
         const savedProjects = localStorage.getItem("projects")
-        const projects = savedProjects ? JSON.parse(savedProjects) : []
+        let projects = savedProjects ? JSON.parse(savedProjects) : []
         const targetProjectId = projectId || "universal"
+        let targetProject = projects.find((p: Project) => p.id === targetProjectId)
+
+        if (!targetProject) {
+          targetProject = {
+            id: "universal",
+            name: "Universal Kanban",
+            description: "Tasks not assigned to a specific project",
+            tickets: [],
+            assignedMembers: [],
+            status: "Active",
+            createdDate: new Date().toISOString().split("T")[0],
+            hasKanban: true,
+          }
+          projects.push(targetProject)
+        }
+
         const updatedProjects = projects.map((p: Project) =>
-          p.id === targetProjectId ? { ...p, tickets: [...p.tickets, task.id] } : p
+          p.id === targetProjectId
+            ? { ...p, tickets: [...p.tickets.filter((id: string) => id !== task.id), task.id] }
+            : p
         )
         localStorage.setItem("projects", JSON.stringify(updatedProjects))
         setProject((prev) =>
-          prev && prev.id === targetProjectId ? { ...prev, tickets: [...prev.tickets, task.id] } : prev
+          prev && prev.id === targetProjectId
+            ? { ...prev, tickets: [...prev.tickets.filter((id: string) => id !== task.id), task.id] }
+            : targetProject
         )
         console.log(`Added ticket ${task.id} to project ${targetProjectId} in localStorage`)
       } catch (error) {
