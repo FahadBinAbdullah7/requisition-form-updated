@@ -62,7 +62,7 @@ interface Ticket {
   productName: string
   type: string
   priority: "Low" | "Medium" | "High" | "Critical"
-  status: "Open" | "In Progress" | "Review" | "Completed"
+  status: "todo" | "in-progress" | "review" | "done"
   team: string
   assignee?: string
   createdDate: string
@@ -384,6 +384,30 @@ export default function AdminPanel() {
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [newProject, setNewProject] = useState({ name: "", description: "" })
+  const handleStatusChange = async (ticketId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (response.ok) {
+        setTickets((prev) =>
+          prev.map((ticket) => (ticket.id === ticketId ? { ...ticket, status: newStatus } : ticket)),
+        )
+        alert("Ticket status updated successfully!")
+      } else {
+        const errorData = await response.json()
+        alert(`Error updating ticket status: ${errorData.message || "Unknown error"}`)
+      }
+    } catch (error) {
+      console.error("Failed to update ticket status:", error)
+      alert("Failed to update ticket status.")
+    }
+  }
 
   // Load data from localStorage after component mounts
   useEffect(() => {
@@ -726,11 +750,14 @@ const createKanbanFromProject = (projectId: string) => {
                             </Badge>
                             <Badge
                               variant={
-                                ticket.status === "Completed"
+                                ticket.status === "done"
                                   ? "default"
-                                  : ticket.status === "In Progress"
+                                  : ticket.status === "in-progress"
                                     ? "secondary"
-                                    : "outline"
+                                  : ticket.status === "review"
+                                      ? "destructive"
+                                      : "outline"
+                              
                               }
                             >
                               {ticket.status}
@@ -820,7 +847,7 @@ const createKanbanFromProject = (projectId: string) => {
                               </div>
                             </DialogContent>
                           </Dialog>
-                          <Select onValueChange={(value) => handleStatusChange(ticket.id, value)} value={ticket.status}>
+                           <Select onValueChange={(value) => handleStatusChange(ticket.id, value)} value={ticket.status}>
                             <SelectTrigger className="w-[180px]">
                               <SelectValue placeholder="Update Status" />
                             </SelectTrigger>
