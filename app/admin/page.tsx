@@ -820,6 +820,17 @@ const createKanbanFromProject = (projectId: string) => {
                               </div>
                             </DialogContent>
                           </Dialog>
+                          <Select onValueChange={(value) => handleStatusChange(ticket.id, value)} value={ticket.status}>
+                            <SelectTrigger className="w-[180px]">
+                              <SelectValue placeholder="Update Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="todo">To Do</SelectItem>
+                              <SelectItem value="in-progress">In Progress</SelectItem>
+                              <SelectItem value="review">Review</SelectItem>
+                              <SelectItem value="done">Done</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     ))}
