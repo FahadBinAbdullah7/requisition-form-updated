@@ -157,7 +157,12 @@ export default function KanbanBoard() {
         if (savedProjects) {
           const parsedProjects = JSON.parse(savedProjects)
           const foundProject = parsedProjects.find((p: Project) => p.id === projectId)
-          setProject(foundProject || null)
+          if (foundProject) {
+            setProject(foundProject)
+          } else {
+            console.error(`Project with ID ${projectId} not found`)
+            setProject(null)
+          }
         }
       }
     }
@@ -177,7 +182,8 @@ export default function KanbanBoard() {
 
         const response = await fetch("/api/tickets")
         if (response.ok) {
-          tickets = await response.json()
+          const data = await response.json()
+          tickets = data.tickets || data
         }
 
         const kanbanTickets = tickets.map((ticket: any) => ({
@@ -211,20 +217,23 @@ export default function KanbanBoard() {
           tags: [ticket.type || "Promotional", ticket.priority || "Medium"],
         }))
 
-        // Filter tickets by project if projectId is provided
         const filteredTickets = projectId && project
           ? kanbanTickets.filter((ticket: Ticket) => project.tickets.includes(ticket.id))
           : kanbanTickets
+
+        if (projectId && (!project || filteredTickets.length === 0)) {
+          console.warn(`No tickets found for project ${projectId}`)
+        }
 
         setAvailableTickets(filteredTickets)
         setColumns((prevColumns) =>
           prevColumns.map((column) => ({
             ...column,
             tickets: filteredTickets.filter((ticket: Ticket) => ticket.status === column.status),
-          })),
+          }))
         )
       } catch (error) {
-        console.log("[v0] Failed to load tickets:", error)
+        console.error("[v0] Failed to load tickets:", error)
       }
     }
 
@@ -264,7 +273,6 @@ export default function KanbanBoard() {
     const targetStatus = targetColumnId as Ticket["status"]
     const updatedTicket = { ...draggedTicket, status: targetStatus }
 
-    // Update columns
     setColumns((prevColumns) =>
       prevColumns.map((column) => ({
         ...column,
@@ -272,15 +280,13 @@ export default function KanbanBoard() {
           column.id === targetColumnId
             ? [...column.tickets.filter((t) => t.id !== draggedTicket.id), updatedTicket]
             : column.tickets.filter((t) => t.id !== draggedTicket.id),
-      })),
+      }))
     )
 
-    // Update availableTickets
     setAvailableTickets((prev) =>
-      prev.map((ticket) => (ticket.id === draggedTicket.id ? updatedTicket : ticket)),
+      prev.map((ticket) => (ticket.id === draggedTicket.id ? updatedTicket : ticket))
     )
 
-    // Update localStorage
     if (typeof window !== "undefined") {
       const savedTickets = localStorage.getItem("tickets")
       const tickets = savedTickets ? JSON.parse(savedTickets) : []
@@ -297,7 +303,7 @@ export default function KanbanBoard() {
                       ? "Review"
                       : "Completed",
             }
-          : t,
+          : t
       )
       localStorage.setItem("tickets", JSON.stringify(updatedTickets))
     }
@@ -311,19 +317,17 @@ export default function KanbanBoard() {
         prevColumns.map((column) => ({
           ...column,
           tickets: column.tickets.filter((ticket) => ticket.id !== ticketId),
-        })),
+        }))
       )
 
       setAvailableTickets((prev) => prev.filter((ticket) => ticket.id !== ticketId))
 
-      // Update localStorage tickets
       if (typeof window !== "undefined") {
         const savedTickets = localStorage.getItem("tickets")
         const tickets = savedTickets ? JSON.parse(savedTickets) : []
         const updatedTickets = tickets.filter((t: any) => t.id !== ticketId)
         localStorage.setItem("tickets", JSON.stringify(updatedTickets))
 
-        // Update projects to remove the ticket
         const savedProjects = localStorage.getItem("projects")
         if (savedProjects) {
           const projects = JSON.parse(savedProjects)
@@ -332,6 +336,9 @@ export default function KanbanBoard() {
             tickets: p.tickets.filter((id: string) => id !== ticketId),
           }))
           localStorage.setItem("projects", JSON.stringify(updatedProjects))
+          if (project && projectId === p.id) {
+            setProject({ ...project, tickets: project.tickets.filter((id) => id !== ticketId) })
+          }
         }
       }
     }
@@ -369,12 +376,11 @@ export default function KanbanBoard() {
     }
 
     setColumns((prevColumns) =>
-      prevColumns.map((column) => (column.id === "todo" ? { ...column, tickets: [...column.tickets, task] } : column)),
+      prevColumns.map((column) => (column.id === "todo" ? { ...column, tickets: [...column.tickets, task] } : column))
     )
 
     setAvailableTickets((prev) => [...prev, task])
 
-    // Save to localStorage
     if (typeof window !== "undefined") {
       const savedTickets = localStorage.getItem("tickets")
       const tickets = savedTickets ? JSON.parse(savedTickets) : []
@@ -394,12 +400,11 @@ export default function KanbanBoard() {
       tickets.push(newTicket)
       localStorage.setItem("tickets", JSON.stringify(tickets))
 
-      // If in project mode, add ticket to project
       if (projectId && project) {
         const savedProjects = localStorage.getItem("projects")
         const projects = savedProjects ? JSON.parse(savedProjects) : []
         const updatedProjects = projects.map((p: Project) =>
-          p.id === projectId ? { ...p, tickets: [...p.tickets, task.id] } : p,
+          p.id === projectId ? { ...p, tickets: [...p.tickets, task.id] } : p
         )
         localStorage.setItem("projects", JSON.stringify(updatedProjects))
         setProject((prev) => (prev ? { ...prev, tickets: [...prev.tickets, task.id] } : prev))
@@ -432,20 +437,19 @@ export default function KanbanBoard() {
       prevColumns.map((column) =>
         column.id === "todo"
           ? { ...column, tickets: [...column.tickets, ...projectTickets] }
-          : { ...column, tickets: column.tickets.filter((ticket) => !selectedTickets.includes(ticket.id)) },
-      ),
+          : { ...column, tickets: column.tickets.filter((ticket) => !selectedTickets.includes(ticket.id)) }
+      )
     )
 
     setAvailableTickets((prev) =>
-      prev.map((ticket) => (selectedTickets.includes(ticket.id) ? { ...ticket, status: "todo" } : ticket)),
+      prev.map((ticket) => (selectedTickets.includes(ticket.id) ? { ...ticket, status: "todo" } : ticket))
     )
 
-    // Create new project and save to localStorage
     if (typeof window !== "undefined") {
       const savedTickets = localStorage.getItem("tickets")
       const tickets = savedTickets ? JSON.parse(savedTickets) : []
       const updatedTickets = tickets.map((t: any) =>
-        selectedTickets.includes(t.id) ? { ...t, status: "Open" } : t,
+        selectedTickets.includes(t.id) ? { ...t, status: "Open" } : t
       )
       localStorage.setItem("tickets", JSON.stringify(updatedTickets))
 
@@ -654,7 +658,7 @@ export default function KanbanBoard() {
                         />
                       </div>
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setShowAddTask(false)>
+                        <Button variant="outline" onClick={() => setShowAddTask(false)}>
                           Cancel
                         </Button>
                         <Button onClick={handleAddTask}>Add Task</Button>
