@@ -621,9 +621,9 @@ export default function AdminPanel() {
     )
   }
 
-  const createKanbanFromProject = (projectId: string) => {
-    alert(`Kanban board created for project ${projectId}`)
-  }
+const createKanbanFromProject = (projectId: string) => {
+  router.push(`/kanban?projectId=${projectId}`)
+}
 
   const deleteProject = (projectId: string) => {
     setProjects((prev) => prev.filter((project) => project.id !== projectId))
