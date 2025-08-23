@@ -384,6 +384,17 @@ export default function AdminPanel() {
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [newProject, setNewProject] = useState({ name: "", description: "" })
+  // Helper function to sort tickets by creation date (most recent first)
+const getSortedTickets = () => {
+  return [...tickets].sort((a, b) => {
+    // Convert date strings to Date objects for comparison
+    const dateA = new Date(a.createdDate)
+    const dateB = new Date(b.createdDate)
+    
+    // Sort in descending order (newest first)
+    return dateB.getTime() - dateA.getTime()
+  })
+}
   const handleStatusChange = async (ticketId: string, newStatus: string) => {
     try {
       const response = await fetch(`/api/tickets/${ticketId}/status`, {
@@ -666,6 +677,8 @@ const createKanbanFromProject = (projectId: string) => {
   const deleteProject = (projectId: string) => {
     setProjects((prev) => prev.filter((project) => project.id !== projectId))
   }
+  // Get sorted tickets for display
+const sortedTickets = getSortedTickets()
 
   return (
     <div className="min-h-screen bg-background">
@@ -707,7 +720,7 @@ const createKanbanFromProject = (projectId: string) => {
                   <div>
                     <CardTitle>All Tickets & Projects</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Manage tickets and create projects ({tickets.length} tickets, {projects.length} projects)
+                      Manage tickets and create projects ({tickets.length} tickets, {projects.length} projects) • Showing newest first
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -723,7 +736,7 @@ const createKanbanFromProject = (projectId: string) => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {tickets.map((ticket) => (
+                    {sortedTickets.map((ticket) => (
                       <div key={ticket.id} className="flex items-center gap-4 p-4 border border-border rounded-lg">
                         <input
                           type="checkbox"
