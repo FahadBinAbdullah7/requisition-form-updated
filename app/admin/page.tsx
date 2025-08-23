@@ -86,274 +86,302 @@ interface Project {
 export default function AdminPanel() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [formFields, setFormFields] = useState<FormField[]>([
-    {
-      id: "productName",
-      label: "Product/Course/Requisition Name",
-      type: "text",
-      required: true,
-    },
-    {
-      id: "type",
-      label: "Type",
-      type: "select",
-      required: true,
-      options: ["Promotional", "Paid", "Recorded"],
-    },
-    {
-      id: "deliveryTimeline",
-      label: "Delivery Timeline",
-      type: "date",
-      required: true,
-    },
-    {
-      id: "teamSelection",
-      label: "Team Selection",
-      type: "select",
-      required: true,
-      options: ["CM", "QAC", "SMD", "Class_OPS", "Class_OPS", "QAC & CM" , "QAC & Class_OPS" , "CM & Class_OPS" , "SMD, QAC & CM" , "SMD, QAC & Class_OPS", "SMD, QAC & Class_OPS", "SMD, CM & Class_OPS", "QAC, CM & Class_OPS", " SMD, QAC, CM & Class_OPS"],
-    },
-    {
-      id: "details",
-      label: "Details",
-      type: "textarea",
-      required: true,
-    },
-    {
-      id: "requisitionBreakdown",
-      label: "Requisition Breakdown (Google Sheet/Docs Link)",
-      type: "url",
-      required: true,
-    },
-  ])
-  const [teams, setTeams] = useState<Team[]>([
-    {
-      id: "1",
-      name: "SMD",
-      department: "Content Operations",
-      manager: "A.S.M Akram",
-      members: 9,
-      status: "Active",
-    },
-    {
-      id: "2", 
-      name: "QAC",
-      department: "Content Operations", 
-      manager: "A.S.M Akram",
-      members: 3,
-      status: "Active"
-    },
-    {
-      id: "3",
-      name: "Class Ops",
-      department: "Content Operations",
-      manager: "A.S.M Akram",
-      members: 8,
-      status: "Active",
-    },
-    {
-      id: "4",
-      name: "CM",
-      department: "Content Operations",
-      manager: "A.S.M Akram",
-      members: 3,
-      status: "Active",
-    },
-  ])
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: "1",
-      name: "Umama Tasnuva Aziz",
-      email: "umama@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "2",
-      name: "Nafish-Ul Alam Bhuiyan",
-      email: "nafish@10minuteschool.com",
-      role: "Manager",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "3",
-      name: "Nahid Hasan Sagor",
-      email: "sagor@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "4",
-      name: "Mehedi Hasan Shuvo",
-      email: "mehedi.shuvo@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "5",
-      name: "Md. Rasel Miah",
-      email: "rasel@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "6",
-      name: "Naziha Zabin",
-      email: "naziha@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "7",
-      name: "Zawad Al Zafir",
-      email: "zafir@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "8",
-      name: "Sojib Mia",
-      email: "sojib@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "9",
-      name: "Auritra Halder",
-      email: "auritra@10minuteschool.com",
-      role: "Member",
-      team: "SMD",
-      status: "Active",
-    },
-    {
-      id: "10",
-      name: "Shafqat Bin Shams",
-      email: "shafqat@10minuteschool.com",
-      role: "Manager",
-      team: "QAC",
-      status: "Active",
-    },
-    {
-      id: "11",
-      name: "Md. Sakibul Alam",
-      email: "sakibul@10minuteschool.com",
-      role: "Member",
-      team: "QAC",
-      status: "Active",
-    },
-    {
-      id: "12",
-      name: "Homaira Atika",
-      email: "homaira@10minuteschool.com",
-      role: "Member",
-      team: "QAC",
-      status: "Active",
-    },
-    {
-      id: "13",
-      name: "S.M. Refat Arefin",
-      email: "refat@10minuteschool.com",
-      role: "Manager",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "14",
-      name: "MD Mahedi Hasan",
-      email: "mahedi.tuhin@10minuteschool.com",
-      role: "Member",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "15",
-      name: "Md Asif Khan",
-      email: "asif.khan@10minuteschool.com",
-      role: "Member",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "16",
-      name: "Md Junayet Alam Akash",
-      email: "mdjunayetalama@gmail.com",
-      role: "Member",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "17",
-      name: "Md. Abdullah",
-      email: "mdabdullah@10minuteschool.com",
-      role: "Member",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "18",
-      name: "Yeasin Ahamed Joy",
-      email: "yeasin@10minuteschool.com",
-      role: "Member",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "19",
-      name: "Nayem Ahmed",
-      email: "nayem.ahmed@10minuteschool.com",
-      role: "Member",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "20",
-      name: "Hasib Uddin",
-      email: "hasib@10minuteschool.com",
-      role: "Member",
-      team: "Class Ops",
-      status: "Active",
-    },
-    {
-      id: "21",
-      name: "Fahad Bin Abdullah",
-      email: "fahad@10minuteschool.com",
-      role: "Manager",
-      team: "CM",
-      status: "Active",
-    },
-    {
-      id: "22",
-      name: "S. M. Al Amin",
-      email: "alamin@10minuteschool.com",
-      role: "Member",
-      team: "CM",
-      status: "Active",
-    },
-    {
-      id: "23",
-      name: "Gazi Meraz Mehedi",
-      email: "gm.mehedi@10minuteschool.com",
-      role: "Member",
-      team: "CM",
-      status: "Active",
-    },
-    {
-      id: "24",
-      name: "System Admin",
-      email: "admin@10minuteschool.com",
-      role: "Admin",
-      team: "System",
-      status: "Active",
-    },
-  ])
+
+  // Initialize state from localStorage or default values
+  const [formFields, setFormFields] = useState<FormField[]>(() => {
+    const saved = localStorage.getItem("formFields")
+    return saved ? JSON.parse(saved) : [
+      {
+        id: "productName",
+        label: "Product/Course/Requisition Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "type",
+        label: "Type",
+        type: "select",
+        required: true,
+        options: ["Promotional", "Paid", "Recorded"],
+      },
+      {
+        id: "deliveryTimeline",
+        label: "Delivery Timeline",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "teamSelection",
+        label: "Team Selection",
+        type: "select",
+        required: true,
+        options: [
+          "CM", "QAC", "SMD", "Class_OPS", "QAC & CM", "QAC & Class_OPS", 
+          "CM & Class_OPS", "SMD, QAC & CM", "SMD, QAC & Class_OPS", 
+          "SMD, CM & Class_OPS", "QAC, CM & Class_OPS", "SMD, QAC, CM & Class_OPS"
+        ],
+      },
+      {
+        id: "details",
+        label: "Details",
+        type: "textarea",
+        required: true,
+      },
+      {
+        id: "requisitionBreakdown",
+        label: "Requisition Breakdown (Google Sheet/Docs Link)",
+        type: "url",
+        required: true,
+      },
+    ]
+  })
+
+  const [teams, setTeams] = useState<Team[]>(() => {
+    const saved = localStorage.getItem("teams")
+    return saved ? JSON.parse(saved) : [
+      {
+        id: "1",
+        name: "SMD",
+        department: "Content Operations",
+        manager: "A.S.M Akram",
+        members: 9,
+        status: "Active",
+      },
+      {
+        id: "2", 
+        name: "QAC",
+        department: "Content Operations", 
+        manager: "A.S.M Akram",
+        members: 3,
+        status: "Active"
+      },
+      {
+        id: "3",
+        name: "Class Ops",
+        department: "Content Operations",
+        manager: "A.S.M Akram",
+        members: 8,
+        status: "Active",
+      },
+      {
+        id: "4",
+        name: "CM",
+        department: "Content Operations",
+        manager: "A.S.M Akram",
+        members: 3,
+        status: "Active",
+      },
+    ]
+  })
+
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem("users")
+    return saved ? JSON.parse(saved) : [
+      {
+        id: "1",
+        name: "Umama Tasnuva Aziz",
+        email: "umama@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "2",
+        name: "Nafish-Ul Alam Bhuiyan",
+        email: "nafish@10minuteschool.com",
+        role: "Manager",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "3",
+        name: "Nahid Hasan Sagor",
+        email: "sagor@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "4",
+        name: "Mehedi Hasan Shuvo",
+        email: "mehedi.shuvo@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "5",
+        name: "Md. Rasel Miah",
+        email: "rasel@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "6",
+        name: "Naziha Zabin",
+        email: "naziha@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "7",
+        name: "Zawad Al Zafir",
+        email: "zafir@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "8",
+        name: "Sojib Mia",
+        email: "sojib@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "9",
+        name: "Auritra Halder",
+        email: "auritra@10minuteschool.com",
+        role: "Member",
+        team: "SMD",
+        status: "Active",
+      },
+      {
+        id: "10",
+        name: "Shafqat Bin Shams",
+        email: "shafqat@10minuteschool.com",
+        role: "Manager",
+        team: "QAC",
+        status: "Active",
+      },
+      {
+        id: "11",
+        name: "Md. Sakibul Alam",
+        email: "sakibul@10minuteschool.com",
+        role: "Member",
+        team: "QAC",
+        status: "Active",
+      },
+      {
+        id: "12",
+        name: "Homaira Atika",
+        email: "homaira@10minuteschool.com",
+        role: "Member",
+        team: "QAC",
+        status: "Active",
+      },
+      {
+        id: "13",
+        name: "S.M. Refat Arefin",
+        email: "refat@10minuteschool.com",
+        role: "Manager",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "14",
+        name: "MD Mahedi Hasan",
+        email: "mahedi.tuhin@10minuteschool.com",
+        role: "Member",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "15",
+        name: "Md Asif Khan",
+        email: "asif.khan@10minuteschool.com",
+        role: "Member",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "16",
+        name: "Md Junayet Alam Akash",
+        email: "mdjunayetalama@gmail.com",
+        role: "Member",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "17",
+        name: "Md. Abdullah",
+        email: "mdabdullah@10minuteschool.com",
+        role: "Member",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "18",
+        name: "Yeasin Ahamed Joy",
+        email: "yeasin@10minuteschool.com",
+        role: "Member",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "19",
+        name: "Nayem Ahmed",
+        email: "nayem.ahmed@10minuteschool.com",
+        role: "Member",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "20",
+        name: "Hasib Uddin",
+        email: "hasib@10minuteschool.com",
+        role: "Member",
+        team: "Class Ops",
+        status: "Active",
+      },
+      {
+        id: "21",
+        name: "Fahad Bin Abdullah",
+        email: "fahad@10minuteschool.com",
+        role: "Manager",
+        team: "CM",
+        status: "Active",
+      },
+      {
+        id: "22",
+        name: "S. M. Al Amin",
+        email: "alamin@10minuteschool.com",
+        role: "Member",
+        team: "CM",
+        status: "Active",
+      },
+      {
+        id: "23",
+        name: "Gazi Meraz Mehedi",
+        email: "gm.mehedi@10minuteschool.com",
+        role: "Member",
+        team: "CM",
+        status: "Active",
+      },
+      {
+        id: "24",
+        name: "System Admin",
+        email: "admin@10minuteschool.com",
+        role: "Admin",
+        team: "System",
+        status: "Active",
+      },
+    ]
+  })
+
+  const [tickets, setTickets] = useState<Ticket[]>(() => {
+    const saved = localStorage.getItem("tickets")
+    return saved ? JSON.parse(saved) : []
+  })
+
+  const [projects, setProjects] = useState<Project[]>(() => {
+    const saved = localStorage.getItem("projects")
+    return saved ? JSON.parse(saved) : []
+  })
+
   const [editingField, setEditingField] = useState<string | null>(null)
   const [newField, setNewField] = useState<Partial<FormField>>({
     label: "",
@@ -365,12 +393,31 @@ export default function AdminPanel() {
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "Member", team: "" })
   const [showAddUser, setShowAddUser] = useState(false)
-  const [tickets, setTickets] = useState<Ticket[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
   const [selectedTickets, setSelectedTickets] = useState<string[]>([])
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [newProject, setNewProject] = useState({ name: "", description: "" })
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("formFields", JSON.stringify(formFields))
+  }, [formFields])
+
+  useEffect(() => {
+    localStorage.setItem("teams", JSON.stringify(teams))
+  }, [teams])
+
+  useEffect(() => {
+    localStorage.setItem("users", JSON.stringify(users))
+  }, [users])
+
+  useEffect(() => {
+    localStorage.setItem("tickets", JSON.stringify(tickets))
+  }, [tickets])
+
+  useEffect(() => {
+    localStorage.setItem("projects", JSON.stringify(projects))
+  }, [projects])
 
   useEffect(() => {
     const fetchTickets = async () => {
@@ -1272,7 +1319,7 @@ export default function AdminPanel() {
                               <Label>Role</Label>
                               <Select
                                 value={newUser.role}
-                                onChange={(value) => setNewUser((prev) => ({ ...prev, role: value }))}
+                                onValueChange={(value) => setNewUser((prev) => ({ ...prev, role: value }))}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
@@ -1288,7 +1335,7 @@ export default function AdminPanel() {
                               <Label>Team</Label>
                               <Select
                                 value={newUser.team}
-                                onChange={(value) => setNewUser((prev) => ({ ...prev, team: value }))}
+                                onValueChange={(value) => setNewUser((prev) => ({ ...prev, team: value }))}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select team" />
