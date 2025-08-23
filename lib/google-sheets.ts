@@ -328,9 +328,76 @@ class GoogleSheetsService {
         return true
       }
 
-      // In a real implementation, you'd find the row and update the status column
-      // For now, we'll simulate success
-      console.log(`[v0] Updating ticket ${ticketId} status to ${newStatus}`)
+      const token = await this.getAccessToken()
+
+      // Read all data from the sheet to find the row to update
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/Sheet1`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+      const data = await response.json()
+
+      if (!data.values || data.values.length === 0) {
+        console.error("[v0] No data found in Google Sheet.")
+        return false
+      }
+
+      const headers = data.values[0] as string[]
+      const rows = data.values.slice(1) as string[][]
+
+      const idColumnIndex = headers.findIndex((header) => header.toLowerCase().includes("id"))
+      const statusColumnIndex = headers.findIndex((header) => header.toLowerCase().includes("status"))
+
+      if (idColumnIndex === -1) {
+        console.error("[v0] 'ID' column not found in Google Sheet headers.")
+        return false
+      }
+
+      if (statusColumnIndex === -1) {
+        console.error("[v0] 'Status' column not found in Google Sheet headers.")
+        return false
+      }
+
+      let rowIndexToUpdate = -1
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i][idColumnIndex] === ticketId) {
+          rowIndexToUpdate = i + 2 // +2 because sheet rows are 1-indexed and we skipped header row
+          break
+        }
+      }
+
+      if (rowIndexToUpdate === -1) {
+        console.error(`[v0] Ticket with ID ${ticketId} not found in Google Sheet.`) 
+        return false
+      }
+
+      // Update the status in the specific cell
+      const updateRange = `Sheet1!R${rowIndexToUpdate}C${statusColumnIndex + 1}` // R (row) C (column) notation
+      const updateResponse = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.config.spreadsheetId}/values/${updateRange}?valueInputOption=RAW`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            values: [[newStatus]],
+          }),
+        },
+      )
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text()
+        console.error("[v0] Google Sheets API update error:", errorText)
+        return false
+      }
+
+      console.log(`[v0] Successfully updated ticket ${ticketId} status to ${newStatus}`)
       return true
     } catch (error) {
       console.error("[v0] Error updating ticket status:", error)
