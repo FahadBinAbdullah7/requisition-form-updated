@@ -10,8 +10,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Save, Send } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
 
 // Default form fields as fallback (same as in AdminPanel)
 const defaultFormFields: FormField[] = [
@@ -77,13 +75,11 @@ interface FormField {
 }
 
 export default function CreateTicket() {
-  const { user, isLoading } = useAuth()
-  const router = useRouter()
-
   // Initialize formFields from localStorage or default
   const [formFields, setFormFields] = useState<FormField[]>(defaultFormFields)
   const [formData, setFormData] = useState<Record<string, any>>({
     priority: "Medium",
+    submitterName: "", // Added for public users to input their name
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -103,7 +99,7 @@ export default function CreateTicket() {
     const initialFormData = formFields.reduce((acc, field) => {
       acc[field.id] = field.type === "checkbox" ? [] : ""
       return acc
-    }, { priority: "Medium" } as Record<string, any>)
+    }, { priority: "Medium", submitterName: "" } as Record<string, any>)
     setFormData(initialFormData)
   }, [formFields])
 
@@ -139,6 +135,9 @@ export default function CreateTicket() {
     const missingFields = formFields
       .filter((field) => field.required && (!formData[field.id] || (Array.isArray(formData[field.id]) && formData[field.id].length === 0)))
       .map((field) => field.label)
+    if (!formData.submitterName) {
+      missingFields.push("Submitter Name")
+    }
     if (missingFields.length > 0) {
       setError(`Please fill in required fields: ${missingFields.join(", ")}`)
       setIsSubmitting(false)
@@ -151,7 +150,7 @@ export default function CreateTicket() {
         ...formData,
         createdDate: new Date().toISOString().split("T")[0],
         status: isDraft ? "Draft" : "Open",
-        assignee: user?.name || "",
+        assignee: formData.submitterName, // Use submitterName as assignee
         team: formData.teamSelection || "Unassigned",
         isDraft,
       }
@@ -183,12 +182,9 @@ export default function CreateTicket() {
           const resetData = formFields.reduce((acc, field) => {
             acc[field.id] = field.type === "checkbox" ? [] : ""
             return acc
-          }, { priority: "Medium" } as Record<string, any>)
+          }, { priority: "Medium", submitterName: "" } as Record<string, any>)
           setFormData(resetData)
         }
-
-        // Redirect to dashboard after submission
-        router.push("/dashboard")
       } else {
         throw new Error(result.message)
       }
@@ -295,22 +291,6 @@ export default function CreateTicket() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    router.push("/login")
-    return null
-  }
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -333,6 +313,28 @@ export default function CreateTicket() {
 
       <main className="max-w-4xl mx-auto px-6 py-8">
         <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">
+          {/* Submitter Name */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Submitter Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="submitterName" className="text-sm font-medium">
+                  Your Name <span className="text-destructive ml-1">*</span>
+                </Label>
+                <Input
+                  id="submitterName"
+                  type="text"
+                  value={formData.submitterName as string}
+                  onChange={(e) => handleInputChange("submitterName", e.target.value)}
+                  placeholder="Enter your name"
+                  required
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Priority Selection */}
           <Card>
             <CardHeader>
