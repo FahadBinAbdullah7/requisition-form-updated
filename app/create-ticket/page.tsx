@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +10,63 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Save, Send } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
+
+// Default form fields as fallback (same as in AdminPanel)
+const defaultFormFields: FormField[] = [
+  {
+    id: "productName",
+    label: "Product/Course/Requisition Name",
+    type: "text",
+    required: true,
+  },
+  {
+    id: "type",
+    label: "Type",
+    type: "select",
+    required: true,
+    options: ["Paid", "Promotional", "Recorded", "Others"],
+  },
+  {
+    id: "deliveryTimeline",
+    label: "Delivery Timeline",
+    type: "date",
+    required: true,
+  },
+  {
+    id: "teamSelection",
+    label: "Team Selection",
+    type: "select",
+    required: true,
+    options: [
+      "CM",
+      "QAC",
+      "SMD",
+      "Class_OPS",
+      "QAC & CM",
+      "QAC & Class_OPS",
+      "CM & Class_OPS",
+      "SMD, QAC & CM",
+      "SMD, QAC & Class_OPS",
+      "SMD, CM & Class_OPS",
+      "QAC, CM & Class_OPS",
+      "SMD, QAC, CM & Class_OPS",
+    ],
+  },
+  {
+    id: "details",
+    label: "Details",
+    type: "textarea",
+    required: true,
+  },
+  {
+    id: "requisitionBreakdown",
+    label: "Requisition Breakdown (Google Sheet/Docs Link)",
+    type: "url",
+    required: true,
+  },
+]
 
 interface FormField {
   id: string
@@ -21,74 +77,37 @@ interface FormField {
 }
 
 export default function CreateTicket() {
+  const { user, isLoading } = useAuth()
+  const router = useRouter()
+
+  // Initialize formFields from localStorage or default
+  const [formFields, setFormFields] = useState<FormField[]>(defaultFormFields)
   const [formData, setFormData] = useState<Record<string, any>>({
-    productName: "",
-    type: "",
-    deliveryTimeline: "",
-    teamSelection: "",
-    details: "",
-    requisitionBreakdown: "",
     priority: "Medium",
   })
-
-  // Default form fields - can be modified by admin
-  const [formFields, setFormFields] = useState<FormField[]>([
-    {
-      id: "productName",
-      label: "Product/Course/Requisition Name",
-      type: "text",
-      required: true,
-    },
-    {
-      id: "type",
-      label: "Type",
-      type: "select",
-      required: true,
-      options: ["Paid", "Promotional", "Recorded", "Others"],
-    },
-    {
-      id: "deliveryTimeline",
-      label: "Delivery Timeline",
-      type: "date",
-      required: true,
-    },
-    {
-      id: "teamSelection",
-      label: "Team Selection",
-      type: "select",
-      required: true,
-      options: [
-        "CM",
-        "QAC",
-        "SMD",
-        "Class_OPS",
-        "QAC & CM",
-        "QAC & Class_OPS",
-        "CM & Class_OPS",
-        "SMD, QAC & CM",
-        "SMD, QAC & Class_OPS",
-        "SMD, QAC & Class_OPS",
-        "SMD, CM & Class_OPS",
-        "QAC, CM & Class_OPS",
-        "SMD, QAC, CM & Class_OPS" ,
-      ],
-    },
-    {
-      id: "details",
-      label: "Details",
-      type: "textarea",
-      required: true,
-    },
-    {
-      id: "requisitionBreakdown",
-      label: "Requisition Breakdown (Google Sheet/Docs Link)",
-      type: "url",
-      required: true,
-    },
-  ])
-
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
+  // Load formFields from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedFormFields = localStorage.getItem("formFields")
+      if (savedFormFields) {
+        setFormFields(JSON.parse(savedFormFields))
+      }
+    }
+  }, [])
+
+  // Initialize formData based on formFields
+  useEffect(() => {
+    const initialFormData = formFields.reduce((acc, field) => {
+      acc[field.id] = field.type === "checkbox" ? [] : ""
+      return acc
+    }, { priority: "Medium" } as Record<string, any>)
+    setFormData(initialFormData)
+  }, [formFields])
+
+  // Handle input changes
   const handleInputChange = (fieldId: string, value: string | string[]) => {
     setFormData((prev) => ({
       ...prev,
@@ -96,6 +115,7 @@ export default function CreateTicket() {
     }))
   }
 
+  // Handle checkbox changes
   const handleCheckboxChange = (fieldId: string, option: string, checked: boolean) => {
     const currentValues = formData[fieldId] || []
     let newValues: string[]
@@ -109,22 +129,48 @@ export default function CreateTicket() {
     handleInputChange(fieldId, newValues)
   }
 
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent, isDraft = false) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError(null)
+
+    // Validate required fields
+    const missingFields = formFields
+      .filter((field) => field.required && (!formData[field.id] || (Array.isArray(formData[field.id]) && formData[field.id].length === 0)))
+      .map((field) => field.label)
+    if (missingFields.length > 0) {
+      setError(`Please fill in required fields: ${missingFields.join(", ")}`)
+      setIsSubmitting(false)
+      return
+    }
 
     try {
-      console.log("[v0] Form submission:", { formData, isDraft })
+      const ticket = {
+        id: `ticket_${Date.now()}`,
+        ...formData,
+        createdDate: new Date().toISOString().split("T")[0],
+        status: isDraft ? "Draft" : "Open",
+        assignee: user?.name || "",
+        team: formData.teamSelection || "Unassigned",
+        isDraft,
+      }
 
+      // Save to localStorage
+      if (typeof window !== "undefined") {
+        const savedTickets = localStorage.getItem("tickets")
+        const tickets = savedTickets ? JSON.parse(savedTickets) : []
+        tickets.push(ticket)
+        localStorage.setItem("tickets", JSON.stringify(tickets))
+      }
+
+      // Send to API
       const response = await fetch("/api/tickets", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...formData,
-          isDraft,
-        }),
+        body: JSON.stringify(ticket),
       })
 
       const result = await response.json()
@@ -132,38 +178,29 @@ export default function CreateTicket() {
       if (result.success) {
         alert(result.message)
 
-        // Reset form after successful submission
+        // Reset form after successful submission (except for drafts)
         if (!isDraft) {
-          const resetData: Record<string, any> = {
-            productName: "",
-            type: "",
-            deliveryTimeline: "",
-            teamSelection: "",
-            details: "",
-            requisitionBreakdown: "",
-            priority: "Medium",
-          }
-
-          // Reset checkbox fields to empty arrays
-          formFields.forEach((field) => {
-            if (field.type === "checkbox") {
-              resetData[field.id] = []
-            }
-          })
-
+          const resetData = formFields.reduce((acc, field) => {
+            acc[field.id] = field.type === "checkbox" ? [] : ""
+            return acc
+          }, { priority: "Medium" } as Record<string, any>)
           setFormData(resetData)
         }
+
+        // Redirect to dashboard after submission
+        router.push("/dashboard")
       } else {
-        alert(`Error: ${result.message}`)
+        throw new Error(result.message)
       }
     } catch (error) {
       console.error("[v0] Submission error:", error)
-      alert("Error submitting ticket. Please try again.")
+      setError("Error submitting ticket. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  // Render form field based on type
   const renderField = (field: FormField) => {
     const value = formData[field.id] || (field.type === "checkbox" ? [] : "")
 
@@ -172,7 +209,7 @@ export default function CreateTicket() {
         return (
           <Textarea
             id={field.id}
-            value={value}
+            value={value as string}
             onChange={(e) => handleInputChange(field.id, e.target.value)}
             placeholder={`Enter ${field.label.toLowerCase()}`}
             rows={4}
@@ -183,7 +220,11 @@ export default function CreateTicket() {
 
       case "select":
         return (
-          <Select value={value} onValueChange={(value) => handleInputChange(field.id, value)} required={field.required}>
+          <Select
+            value={value as string}
+            onValueChange={(value) => handleInputChange(field.id, value)}
+            required={field.required}
+          >
             <SelectTrigger>
               <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
             </SelectTrigger>
@@ -222,7 +263,7 @@ export default function CreateTicket() {
           <Input
             id={field.id}
             type="date"
-            value={value}
+            value={value as string}
             onChange={(e) => handleInputChange(field.id, e.target.value)}
             required={field.required}
           />
@@ -233,7 +274,7 @@ export default function CreateTicket() {
           <Input
             id={field.id}
             type="url"
-            value={value}
+            value={value as string}
             onChange={(e) => handleInputChange(field.id, e.target.value)}
             placeholder="https://docs.google.com/..."
             required={field.required}
@@ -245,7 +286,7 @@ export default function CreateTicket() {
           <Input
             id={field.id}
             type="text"
-            value={value}
+            value={value as string}
             onChange={(e) => handleInputChange(field.id, e.target.value)}
             placeholder={`Enter ${field.label.toLowerCase()}`}
             required={field.required}
@@ -254,13 +295,29 @@ export default function CreateTicket() {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    router.push("/login")
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/">
+            <Link href="/dashboard">
               <Button variant="ghost" size="sm" className="flex items-center gap-2">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Dashboard
@@ -313,6 +370,7 @@ export default function CreateTicket() {
                   {renderField(field)}
                 </div>
               ))}
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </CardContent>
           </Card>
 
