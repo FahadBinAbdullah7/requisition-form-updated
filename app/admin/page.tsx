@@ -622,7 +622,21 @@ export default function AdminPanel() {
   }
 
 const createKanbanFromProject = (projectId: string) => {
-  router.push(`/kanban?projectId=${projectId}`)
+  // Find the project
+  const project = projects.find((p) => p.id === projectId)
+  if (project && typeof window !== "undefined") {
+    // Update ticket statuses to "Open" in localStorage
+    const savedTickets = localStorage.getItem("tickets")
+    if (savedTickets) {
+      const tickets = JSON.parse(savedTickets)
+      const updatedTickets = tickets.map((t: any) =>
+        project.tickets.includes(t.id) ? { ...t, status: "Open" } : t
+      )
+      localStorage.setItem("tickets", JSON.stringify(updatedTickets))
+    }
+    // Navigate to KanbanBoard with projectId
+    router.push(`/kanban?projectId=${projectId}`)
+  }
 }
 
   const deleteProject = (projectId: string) => {
